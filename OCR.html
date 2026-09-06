@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Meu OCR - Scanner de Texto</title>
+    
+    <!-- Tesseract.js (Motor OCR) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+    <style>
+        /* =========================================
+           CSS - INTERFACE E RESPONSIVIDADE
+           ========================================= */
+        :root {
+            --bg-color: #121212;
+            --primary: #007bff;
+            --primary-dark: #0056b3;
+            --text-light: #ffffff;
+            --surface: #1e1e1e;
+            --danger: #dc3545;
+            --success: #28a745;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, sans-serif; }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-light);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .hidden { display: none !important; }
+
+        /* HEADER */
+        header {
+            padding: 15px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            position: absolute;
+            top: 0; width: 100%; z-index: 10;
+        }
+
+        /* SCREENS (Telas da Máquina de Estados) */
+        .screen {
+            flex: 1; display: flex; flex-direction: column;
+            width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0;
+        }
+
+        /* TELA DE CÂMERA */
+        #camera-screen video {
+            width: 100%; height: 100%; object-fit: cover;
+        }
+
+        .camera-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            pointer-events: none;
+            background: rgba(0,0,0,0.4);
+        }
+
+        .frame {
+            width: 80%; height: 60%;
+            border: 2px dashed rgba(255, 255, 255, 0.8);
+            border-radius: 10px;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); /* Efeito de máscara */
+            position: relative;
+        }
+        
+        .frame::after {
+            content: 'Posicione o texto aqui';
+            position: absolute; top: -30px; left: 0; width: 100%;
+            text-align: center; font-size: 14px; font-weight: bold;
+        }
+
+        .camera-controls {
+            position: absolute; bottom: 30px; width: 100%;
+            display: flex; justify-content: space-evenly; align-items: center; z-index: 20;
+        }
+
+        .btn-capture {
+            width: 70px; height: 70px;
+            border-radius: 50%; background: white; border: 4px solid #ddd;
+            cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .btn-capture:active { transform: scale(0.95); background: #eee; }
+
+        .btn-icon {
+            background: rgba(0,0,0,0.6); color: white; border: none;
+            width: 50px; height: 50px; border-radius: 50%; font-size: 20px; cursor: pointer;
+        }
+
+        /* TELA DE PROCESSAMENTO */
+        #processing-screen {
+            background: var(--bg-color); justify-content: center; align-items: center; z-index: 30;
+        }
+        .loader {
+            border: 5px solid #333; border-top: 5px solid var(--primary);
+            border-radius: 50%; width: 50px; height: 50px;
+            animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .progress-container { width: 80%; background: #333; border-radius: 10px; margin-top: 20px; overflow: hidden;}
+        .progress-bar { height: 10px; background: var(--primary); width: 0%; transition: width 0.2s; }
+
+        /* TELA DE RESULTADO */
+        #result-screen {
+            background: var(--bg-color); padding: 70px 20px 20px 20px; z-index: 40;
+        }
+        textarea {
+            width: 100%; flex: 1; background: var(--surface); color: white;
+            border: 1px solid #444; border-radius: 8px; padding: 15px;
+            font-size: 16px; resize: none; margin-bottom: 10px;
+        }
+        .stats { font-size: 12px; color: #aaa; text-align: right; margin-bottom: 15px; }
+        
+        .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .btn {
+            padding: 15px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold;
+            cursor: pointer; color: white; text-align: center;
+        }
+        .btn-primary { background: var(--primary); }
+        .btn-secondary { background: #444; }
+        .btn-full { grid-column: span 2; background: var(--success); }
+
+        /* TELA DE ERRO */
+        #error-screen { justify-content: center; align-items: center; padding: 20px; text-align: center; z-index: 50; background: var(--bg-color); }
+        .error-icon { font-size: 50px; color: var(--danger); margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h3>MEU OCR</h3>
+    </header>
+
+    <!-- 1. TELA DA CÂMERA -->
+    <div id="camera-screen" class="screen">
+        <video id="camera-video" autoplay playsinline></video>
+        <div class="camera-overlay">
+            <div class="frame"></div>
+        </div>
+        <div class="camera-controls">
+            <button id="btn-flash" class="btn-icon hidden">🔦</button>
+            <button id="btn-capture" class="btn-capture"></button>
+            <button id="btn-switch-cam" class="btn-icon">🔄</button>
+        </div>
+        <canvas id="capture-canvas" class="hidden"></canvas>
+    </div>
+
+    <!-- 2. TELA DE PROCESSAMENTO -->
+    <div id="processing-screen" class="screen hidden">
+        <div class="loader"></div>
+        <h2 id="process-status">Reconhecendo texto...</h2>
+        <div class="progress-container">
+            <div id="progress-bar" class="progress-bar"></div>
+        </div>
+        <p id="progress-text" style="margin-top: 10px;">0%</p>
+    </div>
+
+    <!-- 3. TELA DE RESULTADO -->
+    <div id="result-screen" class="screen hidden">
+        <textarea id="result-text"></textarea>
+        <div class="stats" id="text-stats">0 caracteres | 0 palavras</div>
+        <div class="actions">
+            <button id="btn-copy" class="btn btn-primary">Copiar</button>
+            <button id="btn-share" class="btn btn-primary">Compartilhar</button>
+            <button id="btn-retake" class="btn btn-full">Nova Captura</button>
+        </div>
+    </div>
+
+    <!-- 4. TELA DE ERRO -->
+    <div id="error-screen" class="screen hidden">
+        <div class="error-icon">⚠️</div>
+        <h2 id="error-title">Erro</h2>
+        <p id="error-msg" style="margin: 20px 0;">Ocorreu um problema.</p>
+        <button id="btn-retry" class="btn btn-primary">Tentar Novamente</button>
+    </div>
+
+    <script>
+        /* =========================================
+           ARQUITETURA JAVASCRIPT SEPARADA
+           ========================================= */
+
+        // --- MÁQUINA DE ESTADOS (app.js) ---
+        const AppState = {
+            current: 'IDLE',
+            set(state) {
+                this.current = state;
+                document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+                
+                if (state === 'CAMERA_READY') {
+                    document.getElementById('camera-screen').classList.remove('hidden');
+                    Camera.start();
+                } else if (state === 'PROCESSING') {
+                    document.getElementById('processing-screen').classList.remove('hidden');
+                } else if (state === 'RESULT') {
+                    document.getElementById('result-screen').classList.remove('hidden');
+                } else if (state === 'ERROR') {
+                    document.getElementById('error-screen').classList.remove('hidden');
+                }
+            },
+            showError(msg) {
+                document.getElementById('error-msg').innerText = msg;
+                this.set('ERROR');
+            }
+        };
+
+        // --- MÓDULO DE CÂMERA (camera.js) ---
+        const Camera = {
+            videoElement: document.getElementById('camera-video'),
+            stream: null,
+            facingMode: 'environment', // Traseira como padrão
+            track: null,
+            flashOn: false,
+
+            async start() {
+                this.stop(); // Garante que streams antigos sejam fechados
+                try {
+                    const constraints = {
+                        video: {
+                            facingMode: this.facingMode,
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 }
+                        }
+                    };
+                    this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    this.videoElement.srcObject = this.stream;
+                    this.track = this.stream.getVideoTracks()[0];
+
+                    // Verifica suporte a Flash/Lanterna
+                    const capabilities = this.track.getCapabilities();
+                    const btnFlash = document.getElementById('btn-flash');
+                    if (capabilities.torch) {
+                        btnFlash.classList.remove('hidden');
+                    } else {
+                        btnFlash.classList.add('hidden');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    AppState.showError("Não foi possível acessar a câmera. Verifique as permissões do navegador.");
+                }
+            },
+
+            stop() {
+                if (this.stream) {
+                    this.stream.getTracks().forEach(t => t.stop());
+                }
+                this.flashOn = false;
+            },
+
+            toggleCamera() {
+                this.facingMode = this.facingMode === 'environment' ? 'user' : 'environment';
+                this.start();
+            },
+
+            async toggleFlash() {
+                if (!this.track) return;
+                this.flashOn = !this.flashOn;
+                try {
+                    await this.track.applyConstraints({ advanced: [{ torch: this.flashOn }] });
+                } catch (e) {
+                    console.error("Erro ao alternar flash", e);
+                }
+            }
+        };
+
+        // --- MÓDULO DE PROCESSAMENTO DE IMAGEM (image-processing.js) ---
+        const ImageProcessor = {
+            canvas: document.getElementById('capture-canvas'),
+            captureFrame(video) {
+                const ctx = this.canvas.getContext('2d');
+                // Mantém a proporção original do vídeo
+                this.canvas.width = video.videoWidth;
+                this.canvas.height = video.videoHeight;
+                
+                // Desenha o frame atual
+                ctx.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
+                
+                // Pré-processamento básico: Filtro CSS no Canvas para melhorar OCR (Contraste + Escala de Cinza)
+                // Para uma V1, aplicamos binarização leve nativamente no canvas
+                ctx.filter = 'grayscale(100%) contrast(150%)';
+                ctx.drawImage(this.canvas, 0, 0);
+                
+                return this.canvas.toDataURL('image/jpeg', 0.9);
+            }
+        };
+
+        // --- MÓDULO OCR (ocr.js) ---
+        const OCR = {
+            worker: null,
+            
+            async init() {
+                // Carrega o modelo em background na inicialização
+                if (!this.worker) {
+                    this.worker = await Tesseract.createWorker('por', 1, {
+                        logger: m => this.updateProgress(m)
+                    });
+                }
+            },
+
+            updateProgress(m) {
+                if (m.status === 'recognizing text') {
+                    const pct = Math.round(m.progress * 100);
+                    document.getElementById('progress-bar').style.width = `${pct}%`;
+                    document.getElementById('progress-text').innerText = `${pct}%`;
+                }
+            },
+
+            async recognize(imageData) {
+                try {
+                    document.getElementById('process-status').innerText = "Carregando motor OCR...";
+                    await this.init();
+                    
+                    document.getElementById('process-status').innerText = "Reconhecendo texto...";
+                    const { data: { text } } = await this.worker.recognize(imageData);
+                    return this.cleanText(text);
+                } catch (error) {
+                    console.error(error);
+                    throw new Error("Falha ao processar a imagem.");
+                }
+            },
+
+            cleanText(text) {
+                // Tratamento básico (Requisito 33)
+                if (!text) return "";
+                return text
+                    .replace(/ {2,}/g, ' ') // Remove espaços múltiplos
+                    .replace(/\n{3,}/g, '\n\n') // Limita quebras de linha a 2
+                    .trim();
+            }
+        };
+
+        // --- MÓDULOS DE AÇÃO (clipboard.js / share.js) ---
+        const Actions = {
+            async copy(text) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    const btn = document.getElementById('btn-copy');
+                    btn.innerText = "Copiado!";
+                    setTimeout(() => btn.innerText = "Copiar", 2000);
+                } catch (err) {
+                    alert("Seu navegador não suporta cópia automática.");
+                }
+            },
+
+            async share(text) {
+                if (navigator.share) {
+                    try {
+                        await navigator.share({
+                            title: 'Texto Digitalizado - Meu OCR',
+                            text: text
+                        });
+                    } catch (err) {
+                        console.log("Compartilhamento cancelado", err);
+                    }
+                }
+            }
+        };
+
+        // --- COORDENADOR PRINCIPAL (app.js / Event Listeners) ---
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // Inicia o app
+            AppState.set('CAMERA_READY');
+            // Inicializa OCR silenciosamente em background para ganhar tempo
+            OCR.init().catch(e => console.log("OCR será carregado na captura."));
+
+            // Esconde botão share se não suportado (Requisito 13)
+            if (!navigator.share) document.getElementById('btn-share').classList.add('hidden');
+
+            // Evento: Capturar
+            document.getElementById('btn-capture').addEventListener('click', async () => {
+                AppState.set('PROCESSING');
+                
+                // 1. Captura imagem do vídeo
+                const imageData = ImageProcessor.captureFrame(Camera.videoElement);
+                
+                // 2. Libera a câmera (Requisito 29)
+                Camera.stop();
+
+                try {
+                    // 3. Executa OCR
+                    const text = await OCR.recognize(imageData);
+                    
+                    if (text.length < 2) {
+                        AppState.showError("Não conseguimos identificar texto suficiente na imagem. Tente aproximar a câmera e melhorar a iluminação.");
+                        return;
+                    }
+
+                    // 4. Mostra Resultado
+                    const textArea = document.getElementById('result-text');
+                    textArea.value = text;
+                    updateStats();
+                    AppState.set('RESULT');
+
+                } catch (error) {
+                    AppState.showError("Ocorreu um problema ao processar a imagem. Tente novamente.");
+                }
+            });
+
+            // Evento: Trocar Câmera
+            document.getElementById('btn-switch-cam').addEventListener('click', () => Camera.toggleCamera());
+
+            // Evento: Lanterna
+            document.getElementById('btn-flash').addEventListener('click', () => Camera.toggleFlash());
+
+            // Evento: Nova Captura
+            document.getElementById('btn-retake').addEventListener('click', () => {
+                document.getElementById('progress-bar').style.width = '0%';
+                document.getElementById('progress-text').innerText = '0%';
+                AppState.set('CAMERA_READY');
+            });
+
+            // Evento: Tentar Novamente (Erro)
+            document.getElementById('btn-retry').addEventListener('click', () => AppState.set('CAMERA_READY'));
+
+            // Eventos: Copiar e Compartilhar
+            const textArea = document.getElementById('result-text');
+            document.getElementById('btn-copy').addEventListener('click', () => Actions.copy(textArea.value));
+            document.getElementById('btn-share').addEventListener('click', () => Actions.share(textArea.value));
+
+            // Atualiza status de palavras/caracteres ao editar
+            textArea.addEventListener('input', updateStats);
+
+            function updateStats() {
+                const text = textArea.value;
+                const chars = text.length;
+                const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+                document.getElementById('text-stats').innerText = `${chars} caracteres | ${words} palavras`;
+            }
+        });
+
+    </script>
+</body>
+</html>
