@@ -270,24 +270,24 @@
             }
         };
 
-        // --- MÓDULO DE PROCESSAMENTO DE IMAGEM (image-processing.js) ---
+        // --- MÓDULO DE PROCESSAMENTO DE IMAGEM CORRIGIDO (image-processing.js) ---
         const ImageProcessor = {
             canvas: document.getElementById('capture-canvas'),
             captureFrame(video) {
                 const ctx = this.canvas.getContext('2d');
-                // Mantém a proporção original do vídeo
+                
+                // 1. Captura a resolução real e máxima da câmera
                 this.canvas.width = video.videoWidth;
                 this.canvas.height = video.videoHeight;
                 
-                // Desenha o frame atual
+                // 2. Limpa o canvas para garantir que não há sujeira na imagem
+                ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // 3. Desenha o frame limpo mantendo as cores e nitidez originais da câmera
                 ctx.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
                 
-                // Pré-processamento básico: Filtro CSS no Canvas para melhorar OCR (Contraste + Escala de Cinza)
-                // Para uma V1, aplicamos binarização leve nativamente no canvas
-                ctx.filter = 'grayscale(100%) contrast(150%)';
-                ctx.drawImage(this.canvas, 0, 0);
-                
-                return this.canvas.toDataURL('image/jpeg', 0.9);
+                // 4. Retorna a imagem em máxima qualidade (1.0) para o OCR não se confundir
+                return this.canvas.toDataURL('image/jpeg', 1.0);
             }
         };
 
@@ -378,7 +378,7 @@
             document.getElementById('btn-capture').addEventListener('click', async () => {
                 AppState.set('PROCESSING');
                 
-                // 1. Captura imagem do vídeo
+                // 1. Captura imagem do vídeo (sem distorções)
                 const imageData = ImageProcessor.captureFrame(Camera.videoElement);
                 
                 // 2. Libera a câmera (Requisito 29)
