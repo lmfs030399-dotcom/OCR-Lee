@@ -1,11 +1,11 @@
 {
-  "name": "Scanner & Tradutor PRO",
-  "short_name": "Scanner",
-  "description": "Escaneie fotos, extraia o texto de forma inteligente e traduza automaticamente para diversos idiomas. Conta com leitura em voz alta e cópia rápida.",
+  "name": "Meu OCR Scanner",
+  "short_name": "OCR Scanner",
+  "description": "Escaneie textos com a câmera, recorte a área desejada, extraia o texto e traduza para vários idiomas instantaneamente.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#2c73eb",
+  "background_color": "#121212",
+  "theme_color": "#007bff",
   "orientation": "portrait",
   "icons": [
     {
