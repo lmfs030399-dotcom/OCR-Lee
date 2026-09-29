@@ -16,9 +16,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 
-    <!-- Tesseract.js (Motor OCR) -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-
     <style>
         /* =========================================
            CSS - INTERFACE E RESPONSIVIDADE
@@ -168,11 +165,12 @@
 
     <header>
         <h3><i class="fa-solid fa-expand"></i> MEU OCR</h3>
+        <!-- Códigos de idioma do OCR.Space -->
         <select id="ocr-lang-select" class="lang-select-camera">
             <option value="por" selected>Ler: Português</option>
             <option value="eng">Ler: Inglês</option>
             <option value="spa">Ler: Espanhol</option>
-            <option value="por+eng">Ler: PT + EN</option>
+            <option value="fre">Ler: Francês</option>
         </select>
     </header>
 
@@ -201,7 +199,7 @@
         </div>
         <div class="cropper-actions">
             <button class="btn btn-secondary" style="flex: 1;" onclick="AppState.set('CAMERA_READY')">Cancelar</button>
-            <button class="btn btn-primary" style="flex: 2;" id="btn-process-crop"><i class="fa-solid fa-check"></i> Extrair</button>
+            <button class="btn btn-primary" style="flex: 2;" id="btn-process-crop"><i class="fa-solid fa-check"></i> Extrair Texto</button>
         </div>
     </div>
 
@@ -252,7 +250,7 @@
     <div id="error-screen" class="screen hidden">
         <div class="error-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
         <h2 id="error-title">Atenção</h2>
-        <p id="error-msg" style="margin: 15px 0; color: #aaa; font-size: 14px;">Não foi possível acessar a câmera.</p>
+        <p id="error-msg" style="margin: 15px 0; color: #aaa; font-size: 14px;">Ocorreu um problema ao tentar acessar a câmera.</p>
         
         <div style="display: flex; flex-direction: column; gap: 15px; width: 80%; max-width: 250px; margin: 0 auto;">
             <label for="gallery-input-error" class="btn btn-primary" style="cursor: pointer;">
@@ -260,7 +258,7 @@
             </label>
             <input type="file" id="gallery-input-error" accept="image/*" style="position: absolute; opacity: 0; width: 1px; height: 1px; z-index: -1;">
             
-            <button id="btn-retry" class="btn btn-secondary">Tentar Câmera</button>
+            <button id="btn-retry" class="btn btn-secondary">Tentar Câmera Novamente</button>
         </div>
     </div>
 
@@ -324,7 +322,7 @@
                     if (capabilities && capabilities.torch) btnFlash.classList.remove('hidden');
                     else btnFlash.classList.add('hidden');
                 } catch (err) {
-                    document.getElementById('error-msg').innerText = "Verifique as permissões de câmera ou use a Galeria.";
+                    document.getElementById('error-msg').innerText = "Verifique as permissões de câmera do navegador ou use a Galeria.";
                     AppState.set('ERROR');
                 }
             },
@@ -351,85 +349,95 @@
                 this.canvas.width = video.videoWidth;
                 this.canvas.height = video.videoHeight;
                 ctx.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
-                return this.canvas.toDataURL('image/jpeg', 1.0);
+                return this.canvas.toDataURL('image/jpeg', 0.9);
             },
-            getEnhancedCroppedData() {
+            getCroppedBase64() {
                 if(!cropper) return null;
-                
-                // Pega a imagem recortada com alta qualidade
-                const croppedCanvas = cropper.getCroppedCanvas({
+                // Pega a imagem APENAS RECORTADA, pura, para a API Profissional ler
+                return cropper.getCroppedCanvas({
                     imageSmoothingEnabled: true,
                     imageSmoothingQuality: 'high'
-                });
-                
-                // Amplia a imagem 2x. O Tesseract lê muito melhor imagens grandes.
-                // Sem aplicar filtros de contraste exagerados que destroem o texto.
-                const scale = 2; 
-                const finalCanvas = document.createElement('canvas');
-                finalCanvas.width = croppedCanvas.width * scale;
-                finalCanvas.height = croppedCanvas.height * scale;
-                
-                const ctx = finalCanvas.getContext('2d');
-                ctx.imageSmoothingEnabled = true;
-                ctx.imageSmoothingQuality = 'high';
-                
-                // Deixamos a imagem pura (apenas redimensionada) para o Tesseract usar sua IA interna
-                ctx.drawImage(croppedCanvas, 0, 0, finalCanvas.width, finalCanvas.height);
-                
-                return finalCanvas.toDataURL('image/jpeg', 1.0);
+                }).toDataURL('image/jpeg', 0.9);
             }
         };
 
+        // --- NOVA API CLOUD (OCR.Space) ---
+        // Isso resolve o problema das "alucinações" do Tesseract no navegador do celular
         const OCR = {
-            recognize: async function(image, lang) {
-                return new Promise((resolve, reject) => {
-                    document.getElementById('progress-bar').style.width = `10%`;
-                    document.getElementById('progress-text').innerText = `10%`;
-                    
-                    // Inicialização mais segura do Tesseract v5
-                    Tesseract.recognize(
-                        image,
-                        lang,
-                        {
-                            logger: m => {
-                                if (m.status === 'recognizing text') {
-                                    const pct = Math.round(m.progress * 100);
-                                    document.getElementById('progress-bar').style.width = `${pct}\%`;                                     document.getElementById('progress-text').innerText = `${pct}%`;
-                                }
-                            }
-                        }
-                    ).then(({ data: { text } }) => {
-                        resolve(this.cleanText(text));
-                    }).catch(err => {
-                        reject(err);
+            recognize: async function(imageBase64, lang) {
+                
+                // Simulação de Progresso para a interface não parecer travada
+                let pct = 10;
+                const progressInterval = setInterval(() => {
+                    pct = pct < 90 ? pct + 10 : pct;
+                    document.getElementById('progress-bar').style.width = `${pct}%`;
+                    document.getElementById('progress-text').innerText = `${pct}%`;
+                }, 400);
+
+                try {
+                    // Prepara os dados para enviar para a API
+                    const formData = new FormData();
+                    formData.append("base64Image", imageBase64);
+                    formData.append("language", lang);
+                    formData.append("apikey", "helloworld"); // Chave pública de teste. 
+                    formData.append("isOverlayRequired", "false");
+                    formData.append("scale", "true"); // A própria API aumenta a escala se necessário
+                    formData.append("OCREngine", "1"); // Engine 1 é a mais estável e legível
+
+                    const response = await fetch("https://api.ocr.space/parse/image", {
+                        method: "POST",
+                        body: formData
                     });
-                });
+
+                    clearInterval(progressInterval);
+                    document.getElementById('progress-bar').style.width = `100%`;
+                    document.getElementById('progress-text').innerText = `100%`;
+
+                    const json = await response.json();
+
+                    if (json.IsErroredOnProcessing) {
+                        throw new Error("Erro na API.");
+                    }
+
+                    // Extrai o texto da resposta da API
+                    let extractedText = "";
+                    if (json.ParsedResults && json.ParsedResults.length > 0) {
+                        extractedText = json.ParsedResults[0].ParsedText;
+                    }
+
+                    return this.cleanText(extractedText);
+
+                } catch (error) {
+                    clearInterval(progressInterval);
+                    throw error;
+                }
             },
             
-            // --- O ALGORITMO MÁGICO DE FLUIDEZ DE TEXTO ---
+            // --- O ALGORITMO MÁGICO DE FLUIDEZ DE TEXTO (Aprimorado) ---
             cleanText(text) {
                 if (!text) return "";
                 
                 let cleaned = text;
 
-                // 1. Limpa lixos visuais do OCR, mantendo a formatação e a pontuação correta
-                cleaned = cleaned.replace(/[|~^\\_§©®™=<>*+`]/g, '');
+                // 1. Limpa alguns lixos residuais mantendo acentuações e pontuações úteis
+                cleaned = cleaned.replace(/[|~^\\_§©®™=*+`]/g, '');
 
-                // 2. Conserta hifens no final da linha (Ex: "parale- \n lepípedo" vira "paralelepípedo")
-                cleaned = cleaned.replace(/-\s*\n\s*/g, '');
+                // 2. União de Palavras (Hífen no fim da linha)
+                // Pega coisas como: "parale- \n lepípedo" e junta para "paralelepípedo"
+                cleaned = cleaned.replace(/([a-zA-Zá-úÁ-Ú])-[\s]*\r?\n[\s]*([a-zA-Zá-úÁ-Ú])/g, '$1$2');
 
-                // 3. O SEGREDO DO PARÁGRAFO:
-                // Protege quebras de parágrafo reais (duas quebras de linha ou mais) transformando-as numa marca
-                cleaned = cleaned.replace(/\n{2,}/g, '[[PARAGRAFO]]');
+                // 3. O SEGREDO DO PARÁGRAFO (Smart Text Flow)
+                // Se a API retornar quebras duplas (\r\n\r\n), marcamos como PARAGRAFO real
+                cleaned = cleaned.replace(/(\r?\n){2,}/g, '[[PARAGRAFO]]');
 
-                // 4. Transforma as quebras de linha únicas (Enters no meio da frase) em um espaço simples
-                // Isso faz a frase fluir continuamente, como num livro.
-                cleaned = cleaned.replace(/\n/g, ' ');
+                // 4. Transformação da Quebra Seca em Espaço
+                // O \r\n solitário no meio da frase vira espaço. O texto volta a fluir
+                cleaned = cleaned.replace(/\r?\n/g, ' ');
 
-                // 5. Devolve as quebras de parágrafo reais para o texto
+                // 5. Restaura os parágrafos reais
                 cleaned = cleaned.replace(/\[\[PARAGRAFO\]\]/g, '\n\n');
 
-                // 6. Remove excesso de espaços no meio das frases
+                // 6. Limpa múltiplos espaços deixados para trás
                 cleaned = cleaned.replace(/ {2,}/g, ' ');
 
                 return cleaned.trim();
@@ -634,13 +642,15 @@
 
             document.getElementById('btn-process-crop').addEventListener('click', async () => {
                 AppState.set('PROCESSING');
-                const imageBase64 = ImageProcessor.getEnhancedCroppedData();
+                
+                // Extrai a imagem puramente recortada
+                const imageBase64 = ImageProcessor.getCroppedBase64();
                 const selectedOcrLang = document.getElementById('ocr-lang-select').value;
 
                 try {
                     const text = await OCR.recognize(imageBase64, selectedOcrLang);
                     if (text.length < 2) {
-                        document.getElementById('error-msg').innerText = "Não conseguimos identificar texto legível. A imagem pode estar embaçada ou sem texto.";
+                        document.getElementById('error-msg').innerText = "Não conseguimos identificar texto legível. A imagem pode estar embaçada.";
                         AppState.set('ERROR');
                         return;
                     }
@@ -650,7 +660,7 @@
                     Tabs.switch('original');
                     AppState.set('RESULT');
                 } catch (error) {
-                    document.getElementById('error-msg').innerText = "Ocorreu um erro no processamento.";
+                    document.getElementById('error-msg').innerText = "Ocorreu um erro ao conectar com o motor de leitura. Tente novamente.";
                     AppState.set('ERROR');
                 }
             });
