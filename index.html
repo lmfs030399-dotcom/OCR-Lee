@@ -180,7 +180,7 @@
         <video id="camera-video" autoplay playsinline></video>
         <div class="camera-overlay"><div class="frame"></div></div>
         
-        <!-- CONTROLES DA CÂMERA (AGORA COM BOTÃO DE DITADO DIRETO) -->
+        <!-- CONTROLES DA CÂMERA -->
         <div class="camera-controls">
             <!-- Botão de Galeria -->
             <label for="gallery-input" class="btn-icon" style="cursor: pointer;" title="Abrir da Galeria">
@@ -432,16 +432,23 @@
             }
         };
 
+        // --- SISTEMA DE DITADO APRIMORADO (SEMPRE REPETIÇÕES) ---
         const Dictation = {
             recognition: null,
             isRecording: false,
+            lastTranscript: '',
+            lastTime: 0,
+            
             init() {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 if (!SpeechRecognition) return false;
                 
                 this.recognition = new SpeechRecognition();
                 this.recognition.continuous = true;
-                this.recognition.interimResults = true; 
+                
+                // MUDANÇA PRINCIPAL: Desativa os resultados intermediários
+                // Isso obriga o celular a montar a frase inteira antes de enviar, cortando o bug do loop duplo pela raiz
+                this.recognition.interimResults = false; 
                 
                 this.recognition.onresult = (event) => {
                     let finalTranscript = '';
@@ -450,19 +457,51 @@
                             finalTranscript += event.results[i][0].transcript;
                         }
                     }
-                    if (finalTranscript) {
+                    
+                    let transcript = finalTranscript.trim();
+                    
+                    if (transcript) {
+                        let now = Date.now();
+                        
+                        // FILTRO ANTI-BUG DO ANDROID: Ignora textos idênticos enviados em menos de 1.5s
+                        if (this.lastTranscript === transcript && (now - this.lastTime) < 1500) {
+                            return; 
+                        }
+                        this.lastTranscript = transcript;
+                        this.lastTime = now;
+
                         const textArea = Tabs.active === 'original' ? document.getElementById('result-text-original') : document.getElementById('result-text-traducao');
-                        textArea.value += (textArea.value.length > 0 ? " " : "") + finalTranscript.trim();
+                        
+                        let currentVal = textArea.value;
+                        
+                        // Adiciona espaço automático se não houver no final
+                        if (currentVal.length > 0 && !currentVal.endsWith(' ') && !currentVal.endsWith('\n')) {
+                            currentVal += ' ';
+                        }
+                        
+                        // Primeira letra maiúscula
+                        if (currentVal.length === 0) {
+                            transcript = transcript.charAt(0).toUpperCase() + transcript.slice(1);
+                        }
+                        
+                        textArea.value = currentVal + transcript + ' ';
                         Actions.updateStats();
                     }
                 };
                 
                 this.recognition.onerror = (event) => {
-                    this.stop();
+                    if (event.error !== 'no-speech') {
+                        this.stop();
+                    }
                 };
                 
                 this.recognition.onend = () => {
-                    if(this.isRecording) this.recognition.start(); 
+                    // Atrasa levemente o restart para não estourar a memória no Android
+                    if(this.isRecording) {
+                        setTimeout(() => {
+                            if(this.isRecording) this.recognition.start(); 
+                        }, 250);
+                    }
                 };
                 return true;
             },
@@ -483,6 +522,7 @@
                     if(this.recognition.lang === 'fra') this.recognition.lang = 'fr-FR';
 
                     this.isRecording = true;
+                    this.lastTranscript = ''; // Limpa a memória do filtro
                     this.recognition.start();
                     btn.innerHTML = '<i class="fa-solid fa-stop"></i> Parar Ditado';
                     btn.classList.add('recording');
@@ -647,6 +687,7 @@
             document.getElementById('btn-process-crop').addEventListener('click', async () => {
                 AppState.set('PROCESSING');
                 
+                // Extrai a imagem puramente recortada
                 const imageBase64 = ImageProcessor.getCroppedBase64();
                 const selectedOcrLang = document.getElementById('ocr-lang-select').value;
 
