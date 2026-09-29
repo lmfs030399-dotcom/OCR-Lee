@@ -31,7 +31,6 @@
             --secondary: #6c757d;
             --warning: #ffc107;
             --purple: #8b5cf6;
-            --red: #ef4444;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
@@ -146,7 +145,7 @@
         .btn-warning { background: var(--warning); color: #000;}
         .btn-purple { background: var(--purple); }
         .btn-success { background: var(--success); }
-        .btn-red { background: var(--red); }
+        .btn-danger { background: var(--danger); }
         .btn-full { grid-column: span 2; }
 
         /* TELA DE ERRO */
@@ -166,12 +165,14 @@
 
     <header>
         <h3><i class="fa-solid fa-expand"></i> MEU OCR</h3>
-        <!-- Códigos de idioma do OCR.Space -->
+        <!-- Códigos de idioma do OCR.Space e Mapeamento -->
         <select id="ocr-lang-select" class="lang-select-camera">
             <option value="por" selected>Ler: Português</option>
             <option value="eng">Ler: Inglês</option>
             <option value="spa">Ler: Espanhol</option>
             <option value="fre">Ler: Francês</option>
+            <option value="ger">Ler: Alemão</option>
+            <option value="ita">Ler: Italiano</option>
         </select>
     </header>
 
@@ -180,9 +181,8 @@
         <video id="camera-video" autoplay playsinline></video>
         <div class="camera-overlay"><div class="frame"></div></div>
         
-        <!-- CONTROLES DA CÂMERA -->
         <div class="camera-controls">
-            <!-- Botão de Galeria -->
+            <!-- Galeria -->
             <label for="gallery-input" class="btn-icon" style="cursor: pointer;" title="Abrir da Galeria">
                 <i class="fa-regular fa-image"></i>
             </label>
@@ -227,7 +227,7 @@
     <div id="result-screen" class="screen hidden">
         
         <div class="tabs">
-            <div class="tab active" id="tab-original" onclick="Tabs.switch('original')">Texto Extraído</div>
+            <div class="tab active" id="tab-original" onclick="Tabs.switch('original')">Texto Original</div>
             <div class="tab" id="tab-traducao" onclick="Tabs.switch('traducao')">Tradução</div>
         </div>
 
@@ -245,6 +245,8 @@
                 <option value="en">Para: Inglês 🇺🇸</option>
                 <option value="es">Para: Espanhol 🇪🇸</option>
                 <option value="fr">Para: Francês 🇫🇷</option>
+                <option value="de">Para: Alemão 🇩🇪</option>
+                <option value="it">Para: Italiano 🇮🇹</option>
             </select>
             <button id="btn-translate" class="btn btn-warning"><i class="fa-solid fa-language"></i> Traduzir</button>
         </div>
@@ -254,6 +256,8 @@
             <button id="btn-speak" class="btn btn-purple"><i class="fa-solid fa-volume-high"></i> Ouvir</button>
             <button id="btn-copy" class="btn btn-primary"><i class="fa-regular fa-copy"></i> Copiar</button>
             <button id="btn-share" class="btn btn-primary"><i class="fa-solid fa-share-nodes"></i> Compartilhar</button>
+            <button id="btn-clear" class="btn btn-danger"><i class="fa-solid fa-trash"></i> Limpar</button>
+            <button id="btn-download" class="btn btn-secondary"><i class="fa-solid fa-download"></i> Salvar TXT</button>
             <button id="btn-retake" class="btn btn-success btn-full"><i class="fa-solid fa-house"></i> Voltar ao Início</button>
         </div>
     </div>
@@ -281,6 +285,19 @@
         }
 
         let cropper = null;
+
+        // --- MAPA DINÂMICO DE IDIOMAS ---
+        // Converte as siglas da API para o padrão universal de Voz/Ditado do Google/Apple
+        const LanguageCodes = {
+            ocrToSpeech: {
+                'por': 'pt-BR', 'eng': 'en-US', 'spa': 'es-ES',
+                'fre': 'fr-FR', 'ger': 'de-DE', 'ita': 'it-IT'
+            },
+            translateToSpeech: {
+                'pt': 'pt-BR', 'en': 'en-US', 'es': 'es-ES',
+                'fr': 'fr-FR', 'de': 'de-DE', 'it': 'it-IT'
+            }
+        };
 
         const AppState = {
             current: 'IDLE',
@@ -432,7 +449,6 @@
             }
         };
 
-        // --- SISTEMA DE DITADO APRIMORADO (SEMPRE REPETIÇÕES) ---
         const Dictation = {
             recognition: null,
             isRecording: false,
@@ -445,10 +461,7 @@
                 
                 this.recognition = new SpeechRecognition();
                 this.recognition.continuous = true;
-                
-                // MUDANÇA PRINCIPAL: Desativa os resultados intermediários
-                // Isso obriga o celular a montar a frase inteira antes de enviar, cortando o bug do loop duplo pela raiz
-                this.recognition.interimResults = false; 
+                this.recognition.interimResults = false; // Desativado para evitar frases repetidas no celular
                 
                 this.recognition.onresult = (event) => {
                     let finalTranscript = '';
@@ -463,7 +476,7 @@
                     if (transcript) {
                         let now = Date.now();
                         
-                        // FILTRO ANTI-BUG DO ANDROID: Ignora textos idênticos enviados em menos de 1.5s
+                        // Anti-Bug: Ignora textos idênticos enviados em menos de 1.5s
                         if (this.lastTranscript === transcript && (now - this.lastTime) < 1500) {
                             return; 
                         }
@@ -471,15 +484,12 @@
                         this.lastTime = now;
 
                         const textArea = Tabs.active === 'original' ? document.getElementById('result-text-original') : document.getElementById('result-text-traducao');
-                        
                         let currentVal = textArea.value;
                         
-                        // Adiciona espaço automático se não houver no final
                         if (currentVal.length > 0 && !currentVal.endsWith(' ') && !currentVal.endsWith('\n')) {
                             currentVal += ' ';
                         }
                         
-                        // Primeira letra maiúscula
                         if (currentVal.length === 0) {
                             transcript = transcript.charAt(0).toUpperCase() + transcript.slice(1);
                         }
@@ -490,18 +500,11 @@
                 };
                 
                 this.recognition.onerror = (event) => {
-                    if (event.error !== 'no-speech') {
-                        this.stop();
-                    }
+                    if (event.error !== 'no-speech') this.stop();
                 };
                 
                 this.recognition.onend = () => {
-                    // Atrasa levemente o restart para não estourar a memória no Android
-                    if(this.isRecording) {
-                        setTimeout(() => {
-                            if(this.isRecording) this.recognition.start(); 
-                        }, 250);
-                    }
+                    if(this.isRecording) setTimeout(() => { if(this.isRecording) this.recognition.start(); }, 250);
                 };
                 return true;
             },
@@ -515,14 +518,17 @@
                 if (this.isRecording) {
                     this.stop();
                 } else {
-                    this.recognition.lang = Tabs.active === 'original' ? document.getElementById('ocr-lang-select').value : document.getElementById('target-lang-select').value;
-                    if(this.recognition.lang === 'eng') this.recognition.lang = 'en-US';
-                    if(this.recognition.lang === 'por') this.recognition.lang = 'pt-BR';
-                    if(this.recognition.lang === 'spa') this.recognition.lang = 'es-ES';
-                    if(this.recognition.lang === 'fra') this.recognition.lang = 'fr-FR';
+                    // IDIOMA DINÂMICO PARA O MICROFONE DEPENDENDO DA ABA
+                    if (Tabs.active === 'original') {
+                        const ocrCode = document.getElementById('ocr-lang-select').value;
+                        this.recognition.lang = LanguageCodes.ocrToSpeech[ocrCode] || 'pt-BR';
+                    } else {
+                        const targetCode = document.getElementById('target-lang-select').value;
+                        this.recognition.lang = LanguageCodes.translateToSpeech[targetCode] || 'pt-BR';
+                    }
 
                     this.isRecording = true;
-                    this.lastTranscript = ''; // Limpa a memória do filtro
+                    this.lastTranscript = ''; 
                     this.recognition.start();
                     btn.innerHTML = '<i class="fa-solid fa-stop"></i> Parar Ditado';
                     btn.classList.add('recording');
@@ -607,15 +613,34 @@
                 if(!text) return;
 
                 const utterance = new SpeechSynthesisUtterance(text);
+                
+                // IDIOMA DINÂMICO PARA O ALTO-FALANTE DEPENDENDO DA ABA
                 if (Tabs.active === 'traducao') {
-                    utterance.lang = document.getElementById('target-lang-select').value;
+                    const targetCode = document.getElementById('target-lang-select').value;
+                    utterance.lang = LanguageCodes.translateToSpeech[targetCode] || 'pt-BR';
                 } else {
-                    const ocrLang = document.getElementById('ocr-lang-select').value;
-                    if(ocrLang === 'eng') utterance.lang = 'en-US';
-                    else if(ocrLang === 'spa') utterance.lang = 'es-ES';
-                    else utterance.lang = 'pt-BR';
+                    const ocrCode = document.getElementById('ocr-lang-select').value;
+                    utterance.lang = LanguageCodes.ocrToSpeech[ocrCode] || 'pt-BR';
                 }
                 window.speechSynthesis.speak(utterance);
+            },
+            clear() {
+                const textArea = Tabs.active === 'original' ? document.getElementById('result-text-original') : document.getElementById('result-text-traducao');
+                if (textArea.value.trim() !== '') {
+                    if (confirm("Deseja apagar todo o texto desta aba?")) {
+                        textArea.value = '';
+                        this.updateStats();
+                    }
+                }
+            },
+            downloadTXT() {
+                const text = Tabs.active === 'original' ? document.getElementById('result-text-original').value : document.getElementById('result-text-traducao').value;
+                if(!text) return;
+                const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'Texto_OCR.txt';
+                link.click();
             },
             updateStats() {
                 const text = Tabs.active === 'original' ? document.getElementById('result-text-original').value : document.getElementById('result-text-traducao').value;
@@ -645,15 +670,13 @@
                 });
             });
 
-            // --- AÇÃO DO NOVO BOTÃO DE DITADO (TELA INICIAL) ---
             document.getElementById('btn-home-dictate').addEventListener('click', () => {
                 Camera.stop();
-                document.getElementById('result-text-original').value = ""; // Limpa a caixa de texto
+                document.getElementById('result-text-original').value = "";
                 document.getElementById('result-text-traducao').value = "";
                 Tabs.switch('original');
                 AppState.set('RESULT');
                 
-                // Dá um pequeno atraso para a tela de resultados carregar antes de iniciar o gravador
                 setTimeout(() => {
                     if (!Dictation.isRecording) {
                         Dictation.toggle();
@@ -687,7 +710,6 @@
             document.getElementById('btn-process-crop').addEventListener('click', async () => {
                 AppState.set('PROCESSING');
                 
-                // Extrai a imagem puramente recortada
                 const imageBase64 = ImageProcessor.getCroppedBase64();
                 const selectedOcrLang = document.getElementById('ocr-lang-select').value;
 
@@ -724,6 +746,9 @@
             document.getElementById('btn-translate').addEventListener('click', Actions.translate);
             document.getElementById('btn-speak').addEventListener('click', Actions.speak);
             document.getElementById('btn-dictate').addEventListener('click', () => Dictation.toggle());
+            
+            // Evento do botão Limpar
+            document.getElementById('btn-clear').addEventListener('click', () => Actions.clear());
 
             document.getElementById('result-text-original').addEventListener('input', Actions.updateStats);
             document.getElementById('result-text-traducao').addEventListener('input', Actions.updateStats);
