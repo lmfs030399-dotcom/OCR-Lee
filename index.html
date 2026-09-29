@@ -44,9 +44,26 @@
             background: rgba(0, 0, 0, 0.8);
             position: absolute;
             top: 0; width: 100%; z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        header h3 { font-size: 16px; margin-left: 10px;}
+
+        /* SELETOR DE IDIOMA DO OCR (Câmera) */
+        .lang-select-camera {
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 5px;
+            border-radius: 5px;
+            font-size: 14px;
+            margin-right: 10px;
+            outline: none;
         }
 
-        /* SCREENS (Telas da Máquina de Estados) */
+        /* SCREENS */
         .screen {
             flex: 1; display: flex; flex-direction: column;
             width: 100%; height: 100%;
@@ -69,12 +86,12 @@
             width: 85%; height: 70%;
             border: 2px dashed rgba(255, 255, 255, 0.8);
             border-radius: 10px;
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); /* Efeito de máscara */
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
             position: relative;
         }
         
         .frame::after {
-            content: 'Enquadre todo o texto a ser lido aqui';
+            content: 'Enquadre o texto aqui';
             position: absolute; top: -30px; left: 0; width: 100%;
             text-align: center; font-size: 14px; font-weight: bold;
         }
@@ -122,8 +139,32 @@
         .stats { font-size: 12px; color: #aaa; text-align: right; margin-bottom: 15px; }
         
         .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        
+        /* Grupo de Tradução */
+        .translate-group {
+            grid-column: span 2;
+            display: flex;
+            gap: 10px;
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 8px;
+            align-items: center;
+        }
+        .translate-group select {
+            flex: 1;
+            padding: 10px;
+            background: #444;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .translate-group button {
+            flex: 1;
+        }
+
         .btn {
-            padding: 15px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold;
+            padding: 15px; border: none; border-radius: 8px; font-size: 14px; font-weight: bold;
             cursor: pointer; color: white; text-align: center; display: flex; align-items: center; justify-content: center; gap: 5px;
         }
         .btn-primary { background: var(--primary); }
@@ -141,6 +182,17 @@
 
     <header>
         <h3>MEU OCR</h3>
+        <!-- Seletor do idioma que será LIDO na imagem -->
+        <select id="ocr-lang-select" class="lang-select-camera">
+            <option value="por+eng" selected>PT + EN (Padrão)</option>
+            <option value="por">Português</option>
+            <option value="eng">Inglês</option>
+            <option value="spa">Espanhol</option>
+            <option value="fra">Francês</option>
+            <option value="deu">Alemão</option>
+            <option value="ita">Italiano</option>
+            <option value="rus">Russo (Cirílico)</option>
+        </select>
     </header>
 
     <!-- 1. TELA DA CÂMERA -->
@@ -173,9 +225,23 @@
         <div class="stats" id="text-stats">0 caracteres | 0 palavras</div>
         
         <div class="actions">
+            <!-- Nova Área de Tradução Dinâmica -->
+            <div class="translate-group">
+                <select id="target-lang-select">
+                    <option value="pt" selected>Traduzir para: Português</option>
+                    <option value="en">Inglês</option>
+                    <option value="es">Espanhol</option>
+                    <option value="fr">Francês</option>
+                    <option value="de">Alemão</option>
+                    <option value="it">Italiano</option>
+                    <option value="ja">Japonês</option>
+                    <option value="zh-CN">Chinês</option>
+                </select>
+                <button id="btn-translate" class="btn btn-warning">🌐 Traduzir</button>
+            </div>
+
             <button id="btn-copy" class="btn btn-primary">Copiar</button>
             <button id="btn-share" class="btn btn-primary">Compartilhar</button>
-            <button id="btn-translate" class="btn btn-warning btn-full">🌐 Traduzir (Google)</button>
             <button id="btn-download" class="btn btn-secondary btn-full">📥 Baixar Arquivo .TXT</button>
             <button id="btn-retake" class="btn btn-success btn-full">📷 Nova Captura</button>
         </div>
@@ -190,10 +256,6 @@
     </div>
 
     <script>
-        /* =========================================
-           ARQUITETURA JAVASCRIPT SEPARADA
-           ========================================= */
-
         const AppState = {
             current: 'IDLE',
             set(state) {
@@ -202,10 +264,13 @@
                 
                 if (state === 'CAMERA_READY') {
                     document.getElementById('camera-screen').classList.remove('hidden');
+                    document.querySelector('header').classList.remove('hidden'); // Mostra header na câmera
                     Camera.start();
                 } else if (state === 'PROCESSING') {
+                    document.querySelector('header').classList.add('hidden'); // Esconde header
                     document.getElementById('processing-screen').classList.remove('hidden');
                 } else if (state === 'RESULT') {
+                    document.querySelector('header').classList.add('hidden'); // Esconde header
                     document.getElementById('result-screen').classList.remove('hidden');
                 } else if (state === 'ERROR') {
                     document.getElementById('error-screen').classList.remove('hidden');
@@ -270,33 +335,39 @@
 
         const OCR = {
             worker: null,
+            currentLanguage: '',
             
-            async init() {
-                if (!this.worker) {
-                    // CARREGA INGLÊS E PORTUGUÊS (por+eng) para melhorar leitura de fontes estranhas/estrangeiras
-                    this.worker = await Tesseract.createWorker('por+eng', 1, {
+            // Função Init atualizada para receber o idioma dinamicamente
+            async init(lang) {
+                // Só recria o worker se o idioma mudou ou se não existir
+                if (!this.worker || this.currentLanguage !== lang) {
+                    if (this.worker) {
+                        await this.worker.terminate(); // Limpa o antigo da memória
+                    }
+                    this.worker = await Tesseract.createWorker(lang, 1, {
                         logger: m => this.updateProgress(m)
                     });
                     await this.worker.setParameters({
-                        tessedit_pageseg_mode: '3', // Busca blocos de texto soltos pela tela
+                        tessedit_pageseg_mode: '3', // Mantido 3 para ler blocos variados
                     });
+                    this.currentLanguage = lang;
                 }
             },
 
             updateProgress(m) {
-                if (m.status === 'recognizing text') {
-                    const pct = Math.round(m.progress * 100);
+                if (m.status === 'recognizing text' || m.status === 'loading tesseract core') {
+                    const pct = Math.round((m.progress || 0) * 100);
                     document.getElementById('progress-bar').style.width = `${pct}%`;
                     document.getElementById('progress-text').innerText = `${pct}%`;
                 }
             },
 
-            async recognize(imageData) {
+            async recognize(imageData, lang) {
                 try {
-                    document.getElementById('process-status').innerText = "Carregando motor OCR...";
-                    await this.init();
+                    document.getElementById('process-status').innerText = "Carregando idioma...";
+                    await this.init(lang);
                     
-                    document.getElementById('process-status').innerText = "Reconhecendo texto...";
+                    document.getElementById('process-status').innerText = "Lendo texto da imagem...";
                     const { data: { text } } = await this.worker.recognize(imageData);
                     return this.cleanText(text);
                 } catch (error) {
@@ -305,12 +376,11 @@
                 }
             },
 
-            // NOVA LIMPEZA: Transforma tudo em um bloco fluido (sem parágrafos extras)
             cleanText(text) {
                 if (!text) return "";
                 return text
-                    .replace(/\n+/g, ' ') // Substitui todas as quebras de linha (Enter) por um simples espaço
-                    .replace(/\s{2,}/g, ' ') // Se ficar duplo espaço, transforma em um só
+                    .replace(/\n+/g, ' ')
+                    .replace(/\s{2,}/g, ' ')
                     .trim();
             }
         };
@@ -326,38 +396,53 @@
             },
             async share(text) {
                 if (navigator.share) {
-                    try { await navigator.share({ title: 'Texto Digitalizado - Meu OCR', text: text }); } catch (err) {}
+                    try { await navigator.share({ title: 'Texto Digitalizado', text: text }); } catch (err) {}
                 }
             },
             downloadTXT(text) {
                 const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
-                link.download = 'Texto_Digitalizado_OCR.txt';
+                link.download = 'Texto_Digitalizado.txt';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
             },
-            // NOVA FUNÇÃO: Envia o texto para o Google Tradutor via URL
+            
+            // TRADUÇÃO DINÂMICA
             translate(text) {
-                const url = `https://translate.google.com/?sl=auto&tl=pt&text=${encodeURIComponent(text)}&op=translate`;
+                // 1. Pega o idioma que o usuário escolheu no select da tela de resultados
+                const targetLanguage = document.getElementById('target-lang-select').value;
+                
+                if(!text || text.trim() === "") {
+                    alert("Não há texto para traduzir!");
+                    return;
+                }
+
+                // 2. Monta a URL (sl=auto faz o Google detectar o idioma de origem sozinho. tl= target language)
+                const url = `https://translate.google.com/?sl=auto&tl=${targetLanguage}&text=${encodeURIComponent(text)}&op=translate`;
+                
+                // 3. Abre direto, sem precisar copiar nada
                 window.open(url, '_blank');
             }
         };
 
         document.addEventListener('DOMContentLoaded', () => {
             AppState.set('CAMERA_READY');
-            OCR.init().catch(e => console.log("OCR será carregado na captura."));
             if (!navigator.share) document.getElementById('btn-share').classList.add('hidden');
 
             document.getElementById('btn-capture').addEventListener('click', async () => {
                 AppState.set('PROCESSING');
                 const imageData = ImageProcessor.captureFrame(Camera.videoElement);
                 Camera.stop();
+                
+                // Pega o idioma selecionado no cabeçalho na hora do clique
+                const selectedOcrLang = document.getElementById('ocr-lang-select').value;
+
                 try {
-                    const text = await OCR.recognize(imageData);
+                    const text = await OCR.recognize(imageData, selectedOcrLang);
                     if (text.length < 2) {
-                        document.getElementById('error-msg').innerText = "Não conseguimos identificar texto suficiente.";
+                        document.getElementById('error-msg').innerText = "Não conseguimos identificar texto suficiente na imagem.";
                         AppState.set('ERROR');
                         return;
                     }
@@ -373,6 +458,7 @@
 
             document.getElementById('btn-switch-cam').addEventListener('click', () => Camera.toggleCamera());
             document.getElementById('btn-flash').addEventListener('click', () => Camera.toggleFlash());
+            
             document.getElementById('btn-retake').addEventListener('click', () => {
                 document.getElementById('progress-bar').style.width = '0%';
                 document.getElementById('progress-text').innerText = '0%';
@@ -385,7 +471,7 @@
             document.getElementById('btn-share').addEventListener('click', () => Actions.share(textArea.value));
             document.getElementById('btn-download').addEventListener('click', () => Actions.downloadTXT(textArea.value));
             
-            // NOVO EVENTO: Botão de Tradução
+            // Evento do novo botão de tradução
             document.getElementById('btn-translate').addEventListener('click', () => Actions.translate(textArea.value));
 
             textArea.addEventListener('input', updateStats);
