@@ -2,388 +2,549 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner & Tradutor PRO</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Meu OCR - Scanner & Tradutor</title>
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
 
-    <!-- Fontes Modernas -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Ícones -->
+    <!-- Fontes e Ícones -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Cropper.js CSS (Para cortar a imagem) -->
+    <!-- Cropper.js (Para recorte da imagem) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+
+    <!-- Tesseract.js (Motor OCR) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
     <style>
+        /* =========================================
+           CSS - INTERFACE E RESPONSIVIDADE
+           ========================================= */
         :root {
-            --primary-blue: #2c73eb;
-            --dark-blue: #1a2b4c;
-            --bg-color: #f0f4f8;
-            --card-bg: #ffffff;
-            --text-main: #334155;
-            --text-muted: #64748b;
-            --border-color: #e2e8f0;
-            --purple-accent: #8b5cf6;
+            --bg-color: #121212;
+            --primary: #007bff;
+            --primary-dark: #0056b3;
+            --text-light: #ffffff;
+            --surface: #1e1e1e;
+            --danger: #dc3545;
+            --success: #28a745;
+            --secondary: #6c757d;
+            --warning: #ffc107;
+            --purple: #8b5cf6;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
 
         body {
             background-color: var(--bg-color);
-            color: var(--text-main);
-            display: flex;
-            justify-content: center;
-            padding: 20px 15px;
-            min-height: 100vh;
-        }
-
-        .container {
-            max-width: 600px;
-            width: 100%;
+            color: var(--text-light);
+            height: 100vh;
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            overflow: hidden;
         }
 
-        header { text-align: center; margin-bottom: 10px; }
-        header h1 { font-family: 'Fredoka', sans-serif; color: var(--dark-blue); font-size: 2.2rem; }
-        header p { color: var(--text-muted); font-size: 0.95rem; }
+        .hidden { display: none !important; }
 
-        .card {
-            background: var(--card-bg);
-            border-radius: 24px;
-            padding: 25px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
-            border: 1px solid rgba(255,255,255,0.8);
+        /* HEADER */
+        header {
+            padding: 15px; text-align: center; background: rgba(0, 0, 0, 0.8);
+            position: absolute; top: 0; width: 100%; z-index: 10;
+            display: flex; justify-content: space-between; align-items: center;
         }
-
-        /* UPLOAD SECTION */
-        #step-upload { text-align: center; }
-        .upload-area {
-            border: 2px dashed #cbd5e1;
-            border-radius: 16px;
-            padding: 40px 20px;
-            background: #f8fafc;
-            cursor: pointer;
-            transition: 0.3s;
-            position: relative;
-        }
-        .upload-area:hover { border-color: var(--primary-blue); background: #f1f5f9; }
-        .upload-area i { font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px; }
-        .upload-area h3 { font-size: 1.1rem; color: var(--dark-blue); font-weight: 600; }
-        .upload-area input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-
-        /* CROPPER SECTION */
-        #step-cropper { display: none; }
-        .img-container { max-height: 50vh; margin-bottom: 20px; border-radius: 12px; overflow: hidden; background: #000; }
-        .img-container img { max-width: 100%; display: block; }
-        .btn-action {
-            width: 100%; padding: 16px; font-size: 1.1rem; font-weight: 600; border-radius: 12px;
-            border: none; cursor: pointer; transition: 0.2s; display: flex; justify-content: center; align-items: center; gap: 10px;
-        }
-        .btn-primary { background: linear-gradient(135deg, var(--primary-blue), #1c5fd1); color: white; box-shadow: 0 4px 15px rgba(44, 115, 235, 0.3); }
-        .btn-primary:active { transform: scale(0.98); }
+        header h3 { font-family: 'Fredoka', sans-serif; font-size: 18px; margin-left: 10px; color: var(--primary);}
         
-        .btn-secondary { background: #f1f5f9; color: var(--text-main); margin-bottom: 10px; }
-
-        /* LOADING SECTION */
-        #step-loading { display: none; text-align: center; padding: 40px 0; }
-        .scanner-loader {
-            width: 80px; height: 80px; margin: 0 auto 20px; position: relative;
-            background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23cbd5e1"%3E%3Cpath d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/%3E%3C/svg%3E') center/contain no-repeat;
+        .lang-select-camera {
+            background: #333; color: white; border: 1px solid #555; padding: 6px;
+            border-radius: 5px; font-size: 13px; margin-right: 10px; outline: none;
         }
-        .scanner-line {
-            position: absolute; width: 100%; height: 3px; background: var(--primary-blue);
-            box-shadow: 0 0 10px var(--primary-blue); top: 0; animation: scan 1.5s infinite alternate ease-in-out;
-        }
-        @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
-        #loading-text { font-weight: 600; color: var(--primary-blue); }
 
-        /* RESULTS SECTION */
-        #step-results { display: none; }
-        .tabs { display: flex; background: #f1f5f9; border-radius: 12px; padding: 4px; margin-bottom: 15px; }
-        .tab { flex: 1; text-align: center; padding: 10px; font-weight: 600; cursor: pointer; border-radius: 8px; color: var(--text-muted); transition: 0.3s; }
-        .tab.active { background: white; color: var(--primary-blue); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        
-        .result-box {
-            background: #f8fafc; border: 1px solid var(--border-color); border-radius: 12px;
-            padding: 15px; min-height: 150px; max-height: 300px; overflow-y: auto; font-size: 0.95rem; line-height: 1.6;
-            white-space: pre-wrap; /* Mantém as quebras de linha do OCR */
+        /* SCREENS */
+        .screen {
+            flex: 1; display: flex; flex-direction: column; width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0; background: var(--bg-color);
         }
-        
-        .translate-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 15px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--border-color); }
-        .translate-bar select { padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); font-weight: 500; outline: none; flex: 1; }
-        
-        .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
-        .btn-icon { background: #f1f5f9; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--text-main); display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .btn-icon:hover { background: #e2e8f0; }
-        .btn-icon.restart { grid-column: 1 / -1; background: var(--purple-accent); color: white; margin-top: 10px; }
 
+        /* 1. TELA DE CÂMERA */
+        #camera-screen video { width: 100%; height: 100%; object-fit: cover; }
+        .camera-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            pointer-events: none; background: rgba(0,0,0,0.2);
+        }
+        .frame {
+            width: 85%; height: 60%; border: 2px dashed rgba(255, 255, 255, 0.8);
+            border-radius: 10px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6); position: relative;
+        }
+        .frame::after {
+            content: 'Posicione o texto aqui'; position: absolute; top: -30px; left: 0;
+            width: 100%; text-align: center; font-size: 14px; font-weight: 600;
+        }
+        .camera-controls {
+            position: absolute; bottom: 30px; width: 100%;
+            display: flex; justify-content: space-evenly; align-items: center; z-index: 20;
+        }
+        .btn-capture {
+            width: 75px; height: 75px; border-radius: 50%; background: white;
+            border: 4px solid #ddd; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .btn-capture:active { transform: scale(0.95); background: #eee; }
+        .btn-icon {
+            background: rgba(0,0,0,0.7); color: white; border: none;
+            width: 55px; height: 55px; border-radius: 50%; font-size: 20px; cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        /* 2. TELA DE RECORTE (CROPPER) */
+        #cropper-screen { padding-top: 60px; display: flex; flex-direction: column; }
+        .cropper-container-wrapper { flex: 1; width: 100%; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        .cropper-container-wrapper img { max-width: 100%; max-height: 100%; display: block; }
+        .cropper-actions { padding: 20px; display: flex; gap: 10px; background: #1a1a1a; }
+
+        /* 3. TELA DE PROCESSAMENTO */
+        #processing-screen { justify-content: center; align-items: center; z-index: 30; }
+        .loader {
+            border: 5px solid #333; border-top: 5px solid var(--primary);
+            border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .progress-container { width: 80%; background: #333; border-radius: 10px; margin-top: 20px; overflow: hidden; height: 12px;}
+        .progress-bar { height: 100%; background: var(--primary); width: 0%; transition: width 0.2s; }
+
+        /* 4. TELA DE RESULTADOS */
+        #result-screen { padding: 60px 15px 20px 15px; z-index: 40; overflow-y: auto; }
+        
+        /* Sistema de Abas */
+        .tabs { display: flex; background: #2a2a2a; border-radius: 10px; padding: 5px; margin-bottom: 15px; }
+        .tab { flex: 1; text-align: center; padding: 10px; font-weight: 600; cursor: pointer; border-radius: 8px; color: var(--secondary); transition: 0.3s; font-size: 14px;}
+        .tab.active { background: var(--surface); color: var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+
+        textarea {
+            width: 100%; height: 200px; background: var(--surface); color: white;
+            border: 1px solid #333; border-radius: 8px; padding: 15px;
+            font-size: 15px; resize: none; margin-bottom: 5px; line-height: 1.6;
+        }
+        .stats { font-size: 12px; color: #888; text-align: right; margin-bottom: 15px; }
+        
+        .translate-group { display: flex; gap: 10px; margin-bottom: 15px; }
+        .translate-group select { flex: 1; padding: 12px; background: #2a2a2a; color: white; border: 1px solid #444; border-radius: 8px; outline: none; font-size: 14px;}
+        
+        .actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
+        .btn {
+            padding: 14px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+            cursor: pointer; color: white; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn-primary { background: var(--primary); }
+        .btn-secondary { background: #333; border: 1px solid #444;}
+        .btn-warning { background: var(--warning); color: #000;}
+        .btn-purple { background: var(--purple); }
+        .btn-success { background: var(--success); }
+        .btn-full { grid-column: span 2; }
+
+        /* TELA DE ERRO */
+        #error-screen { justify-content: center; align-items: center; padding: 20px; text-align: center; z-index: 50; }
+        .error-icon { font-size: 50px; color: var(--danger); margin-bottom: 20px; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <header>
-            <h1>Scanner PRO <i class="fa-solid fa-expand"></i></h1>
-            <p>Extraia textos de imagens e traduza na hora.</p>
-        </header>
+    <header>
+        <h3><i class="fa-solid fa-expand"></i> MEU OCR</h3>
+        <select id="ocr-lang-select" class="lang-select-camera">
+            <option value="por+eng" selected>Detecção: PT+EN</option>
+            <option value="por">Português</option>
+            <option value="eng">Inglês</option>
+            <option value="spa">Espanhol</option>
+            <option value="fra">Francês</option>
+        </select>
+    </header>
 
-        <!-- PASSO 1: UPLOAD -->
-        <div class="card" id="step-upload">
-            <div class="upload-area">
-                <i class="fa-solid fa-camera"></i>
-                <h3>Tirar Foto ou Escolher Imagem</h3>
-                <p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">Formatos JPG, PNG</p>
-                <input type="file" id="image-input" accept="image/*" capture="environment">
-            </div>
+    <!-- 1. TELA DA CÂMERA -->
+    <div id="camera-screen" class="screen">
+        <video id="camera-video" autoplay playsinline></video>
+        <div class="camera-overlay"><div class="frame"></div></div>
+        <div class="camera-controls">
+            <button id="btn-flash" class="btn-icon hidden"><i class="fa-solid fa-bolt"></i></button>
+            <button id="btn-capture" class="btn-capture"></button>
+            <button id="btn-switch-cam" class="btn-icon"><i class="fa-solid fa-camera-rotate"></i></button>
         </div>
+        <canvas id="capture-canvas" class="hidden"></canvas>
+    </div>
 
-        <!-- PASSO 2: RECORTE (CROPPER) -->
-        <div class="card" id="step-cropper">
-            <h3 style="margin-bottom: 15px; font-family: 'Fredoka'; color: var(--dark-blue);">Ajuste a área do texto</h3>
-            <div class="img-container">
-                <img id="image-to-crop" src="">
-            </div>
-            <button class="btn-action btn-secondary" onclick="resetApp()"><i class="fa-solid fa-arrow-left"></i> Voltar</button>
-            <button class="btn-action btn-primary" id="btn-process"><i class="fa-solid fa-wand-magic-sparkles"></i> Ler Texto</button>
+    <!-- 2. TELA DE RECORTE (CROPPER) -->
+    <div id="cropper-screen" class="screen hidden">
+        <div class="cropper-container-wrapper">
+            <img id="image-to-crop" src="">
         </div>
-
-        <!-- PASSO 3: CARREGANDO -->
-        <div class="card" id="step-loading">
-            <div class="scanner-loader"><div class="scanner-line"></div></div>
-            <h3 id="loading-text">Analisando imagem...</h3>
-            <p style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">Isso pode levar alguns segundos.</p>
-        </div>
-
-        <!-- PASSO 4: RESULTADOS -->
-        <div class="card" id="step-results">
-            
-            <div class="tabs">
-                <div class="tab active" id="tab-original" onclick="switchTab('original')">Original</div>
-                <div class="tab" id="tab-traducao" onclick="switchTab('traducao')">Tradução</div>
-            </div>
-
-            <div id="content-original" class="result-box"></div>
-            <div id="content-traducao" class="result-box" style="display: none;">Selecione o idioma abaixo para traduzir.</div>
-
-            <!-- Barra de Tradução -->
-            <div class="translate-bar" id="translate-bar-container" style="display: none;">
-                <select id="target-language">
-                    <option value="pt">Português 🇧🇷</option>
-                    <option value="en">Inglês 🇺🇸</option>
-                    <option value="es">Espanhol 🇪🇸</option>
-                    <option value="fr">Francês 🇫🇷</option>
-                    <option value="de">Alemão 🇩🇪</option>
-                    <option value="it">Italiano 🇮🇹</option>
-                </select>
-                <button class="btn-action btn-primary" style="width: auto; padding: 10px 20px;" onclick="translateText()"><i class="fa-solid fa-language"></i> Traduzir</button>
-            </div>
-
-            <div class="actions">
-                <button class="btn-icon" onclick="copyText()"><i class="fa-regular fa-copy"></i> Copiar</button>
-                <button class="btn-icon" id="btn-speak" onclick="speakText()"><i class="fa-solid fa-volume-high"></i> Ouvir</button>
-                <button class="btn-icon restart" onclick="resetApp()"><i class="fa-solid fa-rotate-right"></i> Escanear nova imagem</button>
-            </div>
-
+        <div class="cropper-actions">
+            <button class="btn btn-secondary" style="flex: 1;" onclick="AppState.set('CAMERA_READY')">Cancelar</button>
+            <button class="btn btn-primary" style="flex: 2;" id="btn-process-crop"><i class="fa-solid fa-check"></i> Extrair Texto</button>
         </div>
     </div>
 
-    <!-- Bibliotecas Necessárias -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
-    <!-- Tesseract via CDN (Motor de OCR) -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <!-- 3. TELA DE PROCESSAMENTO -->
+    <div id="processing-screen" class="screen hidden">
+        <div class="loader"></div>
+        <h2 id="process-status" style="font-size: 18px;">Lendo imagem...</h2>
+        <div class="progress-container"><div id="progress-bar" class="progress-bar"></div></div>
+        <p id="progress-text" style="margin-top: 10px; font-size: 14px; color: #aaa;">0%</p>
+    </div>
+
+    <!-- 4. TELA DE RESULTADO -->
+    <div id="result-screen" class="screen hidden">
+        
+        <!-- Abas -->
+        <div class="tabs">
+            <div class="tab active" id="tab-original" onclick="Tabs.switch('original')">Original</div>
+            <div class="tab" id="tab-traducao" onclick="Tabs.switch('traducao')">Tradução</div>
+        </div>
+
+        <textarea id="result-text-original" spellcheck="false"></textarea>
+        <textarea id="result-text-traducao" spellcheck="false" class="hidden" placeholder="Clique em traduzir abaixo..."></textarea>
+        
+        <div class="stats" id="text-stats">0 caracteres | 0 palavras</div>
+        
+        <!-- Tradução Dinâmica -->
+        <div class="translate-group" id="translate-controls">
+            <select id="target-lang-select">
+                <option value="pt" selected>Para: Português 🇧🇷</option>
+                <option value="en">Para: Inglês 🇺🇸</option>
+                <option value="es">Para: Espanhol 🇪🇸</option>
+                <option value="fr">Para: Francês 🇫🇷</option>
+                <option value="de">Para: Alemão 🇩🇪</option>
+                <option value="it">Para: Italiano 🇮🇹</option>
+            </select>
+            <button id="btn-translate" class="btn btn-warning"><i class="fa-solid fa-language"></i> Traduzir</button>
+        </div>
+
+        <div class="actions-grid">
+            <button id="btn-copy" class="btn btn-primary"><i class="fa-regular fa-copy"></i> Copiar</button>
+            <button id="btn-speak" class="btn btn-purple"><i class="fa-solid fa-volume-high"></i> Ouvir</button>
+            <button id="btn-share" class="btn btn-secondary"><i class="fa-solid fa-share-nodes"></i> Compartilhar</button>
+            <button id="btn-download" class="btn btn-secondary"><i class="fa-solid fa-download"></i> Salvar TXT</button>
+            <button id="btn-retake" class="btn btn-success btn-full"><i class="fa-solid fa-camera"></i> Nova Captura</button>
+        </div>
+    </div>
+
+    <!-- 5. TELA DE ERRO -->
+    <div id="error-screen" class="screen hidden">
+        <div class="error-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <h2 id="error-title">Erro</h2>
+        <p id="error-msg" style="margin: 15px 0; color: #aaa; font-size: 14px;">Ocorreu um problema.</p>
+        <button id="btn-retry" class="btn btn-primary" style="width: 200px; margin: 0 auto;">Tentar Novamente</button>
+    </div>
 
     <script>
-        // Variáveis Globais
-        let cropper = null;
-        let currentTextOriginal = "";
-        let currentTextTraduzido = "";
-        let activeTab = "original";
-
-        // Elementos da Interface
-        const elUpload = document.getElementById('step-upload');
-        const elCropper = document.getElementById('step-cropper');
-        const elLoading = document.getElementById('step-loading');
-        const elResults = document.getElementById('step-results');
-        const imageInput = document.getElementById('image-input');
-        const imageToCrop = document.getElementById('image-to-crop');
-        const loadingText = document.getElementById('loading-text');
-
-        // REGISTRO DO SERVICE WORKER (Para o app funcionar como PWA)
+        // PWA SETUP
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').catch(err => console.log('SW falhou: ', err));
-            });
+            window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
         }
 
-        // 1. IMPORTAR A IMAGEM
-        imageInput.addEventListener('change', function(e) {
-            if (e.target.files && e.target.files.length > 0) {
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    imageToCrop.src = event.target.result;
-                    elUpload.style.display = 'none';
-                    elCropper.style.display = 'block';
-                    
-                    // Inicializa o Cropper.js
-                    if (cropper) cropper.destroy();
-                    cropper = new Cropper(imageToCrop, {
-                        viewMode: 1,
-                        autoCropArea: 0.8,
-                        dragMode: 'crop',
-                        background: false
-                    });
-                };
-                reader.readAsDataURL(e.target.files[0]);
-            }
-        });
+        let cropper = null;
 
-        // 2. PROCESSAR O RECORTE E LER (OCR)
-        document.getElementById('btn-process').addEventListener('click', async () => {
-            if (!cropper) return;
-            
-            // Pega apenas a área selecionada
-            const canvas = cropper.getCroppedCanvas();
-            
-            // MELHORIA DE IMAGEM ANTES DO OCR (Preto e branco e mais contraste)
-            const processedCanvas = document.createElement('canvas');
-            const ctx = processedCanvas.getContext('2d');
-            processedCanvas.width = canvas.width;
-            processedCanvas.height = canvas.height;
-            ctx.filter = 'grayscale(100%) contrast(150%)'; // Limpa ruídos
-            ctx.drawImage(canvas, 0, 0);
-
-            // Troca a tela
-            elCropper.style.display = 'none';
-            elLoading.style.display = 'block';
-            loadingText.innerText = "Extraindo texto...";
-
-            try {
-                // Roda o Tesseract (A API entende parágrafos usando o motor padrão)
-                const result = await Tesseract.recognize(
-                    processedCanvas,
-                    'eng+por', // Processa base dupla para maior acerto inicial
-                    { logger: m => { if(m.status === "recognizing text") loadingText.innerText = `Lendo: ${Math.round(m.progress * 100)}%`; } }
-                );
-
-                currentTextOriginal = result.data.text.trim();
+        const AppState = {
+            current: 'IDLE',
+            set(state) {
+                this.current = state;
+                document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
                 
-                if(currentTextOriginal === "") {
-                    currentTextOriginal = "Nenhum texto claro foi encontrado na área selecionada.";
+                if (state === 'CAMERA_READY') {
+                    document.getElementById('camera-screen').classList.remove('hidden');
+                    document.querySelector('header').classList.remove('hidden');
+                    window.speechSynthesis.cancel(); // Para áudio ao voltar
+                    Camera.start();
+                } 
+                else if (state === 'CROPPER') {
+                    document.getElementById('cropper-screen').classList.remove('hidden');
+                    document.querySelector('header').classList.add('hidden');
                 }
-
-                // Prepara a tela de resultados
-                document.getElementById('content-original').innerText = currentTextOriginal;
-                document.getElementById('content-traducao').innerText = "Clique em Traduzir para ver o resultado.";
-                currentTextTraduzido = ""; // Reseta tradução anterior
-                switchTab('original');
-
-                elLoading.style.display = 'none';
-                elResults.style.display = 'block';
-
-            } catch (error) {
-                alert("Erro ao ler a imagem. Tente novamente com mais nitidez.");
-                resetApp();
+                else if (state === 'PROCESSING') {
+                    document.querySelector('header').classList.add('hidden');
+                    document.getElementById('processing-screen').classList.remove('hidden');
+                } 
+                else if (state === 'RESULT') {
+                    document.querySelector('header').classList.add('hidden');
+                    document.getElementById('result-screen').classList.remove('hidden');
+                } 
+                else if (state === 'ERROR') {
+                    document.querySelector('header').classList.add('hidden');
+                    document.getElementById('error-screen').classList.remove('hidden');
+                }
             }
-        });
+        };
 
-        // 3. TRADUÇÃO AUTOMÁTICA API (Google Translate endpoint gratuito)
-        async function translateText() {
-            if(!currentTextOriginal || currentTextOriginal.includes("Nenhum texto claro")) return;
-            
-            loadingText.innerText = "Traduzindo...";
-            elResults.style.display = 'none';
-            elLoading.style.display = 'block';
+        const Camera = {
+            videoElement: document.getElementById('camera-video'),
+            stream: null,
+            facingMode: 'environment',
+            track: null,
+            flashOn: false,
 
-            const targetLang = document.getElementById('target-language').value;
-            
-            // Endpoint público do Google Apps Script / Translate (Excelente para apps web gratuitos)
-            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(currentTextOriginal)}`;
+            async start() {
+                this.stop(); 
+                try {
+                    const constraints = { video: { facingMode: this.facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } } };
+                    this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    this.videoElement.srcObject = this.stream;
+                    this.track = this.stream.getVideoTracks()[0];
 
-            try {
-                const response = await fetch(url);
-                const data = await response.json();
+                    const capabilities = this.track.getCapabilities();
+                    const btnFlash = document.getElementById('btn-flash');
+                    if (capabilities.torch) btnFlash.classList.remove('hidden');
+                    else btnFlash.classList.add('hidden');
+                } catch (err) {
+                    document.getElementById('error-msg').innerText = "Não foi possível acessar a câmera. Verifique as permissões do navegador.";
+                    AppState.set('ERROR');
+                }
+            },
+            stop() {
+                if (this.stream) this.stream.getTracks().forEach(t => t.stop());
+                this.flashOn = false;
+            },
+            toggleCamera() {
+                this.facingMode = this.facingMode === 'environment' ? 'user' : 'environment';
+                this.start();
+            },
+            async toggleFlash() {
+                if (!this.track) return;
+                this.flashOn = !this.flashOn;
+                try { await this.track.applyConstraints({ advanced: [{ torch: this.flashOn }] }); } 
+                catch (e) { console.error("Erro no flash", e); }
+            }
+        };
+
+        const ImageProcessor = {
+            canvas: document.getElementById('capture-canvas'),
+            captureFrame(video) {
+                const ctx = this.canvas.getContext('2d');
+                this.canvas.width = video.videoWidth;
+                this.canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
+                return this.canvas.toDataURL('image/jpeg', 1.0);
+            },
+            // Prepara a imagem recortada com filtros para melhorar o OCR
+            getEnhancedCroppedData() {
+                if(!cropper) return null;
+                const croppedCanvas = cropper.getCroppedCanvas();
+                const processedCanvas = document.createElement('canvas');
+                const ctx = processedCanvas.getContext('2d');
+                processedCanvas.width = croppedCanvas.width;
+                processedCanvas.height = croppedCanvas.height;
                 
-                // Junta os blocos traduzidos
-                currentTextTraduzido = data[0].map(item => item[0]).join('');
-                document.getElementById('content-traducao').innerText = currentTextTraduzido;
+                // Filtro Mágico: Tons de cinza e super contraste
+                ctx.filter = 'grayscale(100%) contrast(150%)';
+                ctx.drawImage(croppedCanvas, 0, 0);
                 
-                switchTab('traducao');
-            } catch (error) {
-                document.getElementById('content-traducao').innerText = "Erro ao conectar com o serviço de tradução. Verifique sua internet.";
-                switchTab('traducao');
+                return processedCanvas;
             }
+        };
 
-            elLoading.style.display = 'none';
-            elResults.style.display = 'block';
-        }
-
-        // 4. LÓGICA DAS ABAS (TABS)
-        function switchTab(tab) {
-            activeTab = tab;
-            document.getElementById('tab-original').classList.remove('active');
-            document.getElementById('tab-traducao').classList.remove('active');
+        const OCR = {
+            worker: null,
+            currentLanguage: '',
             
-            document.getElementById('content-original').style.display = 'none';
-            document.getElementById('content-traducao').style.display = 'none';
-
-            if(tab === 'original') {
-                document.getElementById('tab-original').classList.add('active');
-                document.getElementById('content-original').style.display = 'block';
-                document.getElementById('translate-bar-container').style.display = 'flex';
-            } else {
-                document.getElementById('tab-traducao').classList.add('active');
-                document.getElementById('content-traducao').style.display = 'block';
-                document.getElementById('translate-bar-container').style.display = 'none';
+            async init(lang) {
+                if (!this.worker || this.currentLanguage !== lang) {
+                    if (this.worker) await this.worker.terminate();
+                    this.worker = await Tesseract.createWorker(lang, 1, {
+                        logger: m => this.updateProgress(m)
+                    });
+                    // PSM 3 é ideal para blocos de texto, colunas e parágrafos automáticos
+                    await this.worker.setParameters({ tessedit_pageseg_mode: '3' });
+                    this.currentLanguage = lang;
+                }
+            },
+            updateProgress(m) {
+                if (m.status === 'recognizing text' || m.status === 'loading tesseract core') {
+                    const pct = Math.round((m.progress || 0) * 100);
+                    document.getElementById('progress-bar').style.width = `${pct}%`;
+                    document.getElementById('progress-text').innerText = `${pct}%`;
+                }
+            },
+            async recognize(imageData, lang) {
+                try {
+                    document.getElementById('process-status').innerText = "Carregando motor OCR...";
+                    await this.init(lang);
+                    document.getElementById('process-status').innerText = "Extraindo texto...";
+                    const { data: { text } } = await this.worker.recognize(imageData);
+                    return this.cleanText(text);
+                } catch (error) {
+                    throw new Error("Falha ao processar.");
+                }
+            },
+            cleanText(text) {
+                if (!text) return "";
+                return text.replace(/\n{3,}/g, '\n\n').trim(); // Mantém parágrafos originais
             }
-            
-            // Cancela áudio se trocar de aba
-            window.speechSynthesis.cancel();
-        }
+        };
 
-        // 5. COPIAR E OUVIR
-        function copyText() {
-            const textToCopy = activeTab === 'original' ? currentTextOriginal : currentTextTraduzido;
-            navigator.clipboard.writeText(textToCopy).then(() => {
-                alert("Texto copiado com sucesso!");
+        const Tabs = {
+            active: 'original',
+            switch(tabName) {
+                this.active = tabName;
+                document.getElementById('tab-original').classList.remove('active');
+                document.getElementById('tab-traducao').classList.remove('active');
+                document.getElementById('result-text-original').classList.add('hidden');
+                document.getElementById('result-text-traducao').classList.add('hidden');
+
+                document.getElementById(`tab-${tabName}`).classList.add('active');
+                document.getElementById(`result-text-${tabName}`).classList.remove('hidden');
+
+                // Esconde a barra de tradução se estiver na aba de tradução já feita
+                if(tabName === 'original') {
+                    document.getElementById('translate-controls').classList.remove('hidden');
+                } else {
+                    document.getElementById('translate-controls').classList.add('hidden');
+                }
+                
+                Actions.updateStats();
+                window.speechSynthesis.cancel(); // Para áudio ao trocar de aba
+            }
+        };
+
+        const Actions = {
+            async copy() {
+                const text = Tabs.active === 'original' ? document.getElementById('result-text-original').value : document.getElementById('result-text-traducao').value;
+                try {
+                    await navigator.clipboard.writeText(text);
+                    const btn = document.getElementById('btn-copy');
+                    btn.innerHTML = "<i class='fa-solid fa-check'></i> Copiado";
+                    setTimeout(() => btn.innerHTML = "<i class='fa-regular fa-copy'></i> Copiar", 2000);
+                } catch (err) { alert("Erro ao copiar."); }
+            },
+            async share() {
+                const text = Tabs.active === 'original' ? document.getElementById('result-text-original').value : document.getElementById('result-text-traducao').value;
+                if (navigator.share) {
+                    try { await navigator.share({ title: 'Texto Extraído', text: text }); } catch (err) {}
+                }
+            },
+            downloadTXT() {
+                const text = Tabs.active === 'original' ? document.getElementById('result-text-original').value : document.getElementById('result-text-traducao').value;
+                const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'Texto_OCR.txt';
+                link.click();
+            },
+            async translate() {
+                const text = document.getElementById('result-text-original').value;
+                if(!text || text.trim() === "") return alert("Não há texto para traduzir!");
+
+                const targetLang = document.getElementById('target-lang-select').value;
+                const btn = document.getElementById('btn-translate');
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>...';
+                
+                // API Gratuita e Direta do Google Translate
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
+
+                try {
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    const translatedText = data[0].map(item => item[0]).join('');
+                    
+                    document.getElementById('result-text-traducao').value = translatedText;
+                    Tabs.switch('traducao');
+                } catch (error) {
+                    alert("Erro ao traduzir. Verifique a internet.");
+                }
+                btn.innerHTML = '<i class="fa-solid fa-language"></i> Traduzir';
+            },
+            speak() {
+                window.speechSynthesis.cancel();
+                const text = Tabs.active === 'original' ? document.getElementById('result-text-original').value : document.getElementById('result-text-traducao').value;
+                if(!text) return;
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                if (Tabs.active === 'traducao') {
+                    utterance.lang = document.getElementById('target-lang-select').value;
+                } else {
+                    utterance.lang = 'pt-BR'; // Tenta PT como padrão para a leitura original
+                }
+                window.speechSynthesis.speak(utterance);
+            },
+            updateStats() {
+                const text = Tabs.active === 'original' ? document.getElementById('result-text-original').value : document.getElementById('result-text-traducao').value;
+                const chars = text.length;
+                const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+                document.getElementById('text-stats').innerText = `${chars} caracteres | ${words} palavras`;
+            }
+        };
+
+        // INICIALIZAÇÃO E EVENTOS
+        document.addEventListener('DOMContentLoaded', () => {
+            AppState.set('CAMERA_READY');
+            if (!navigator.share) document.getElementById('btn-share').classList.add('hidden');
+
+            // 1. CAPTURAR FOTO E ABRIR CROPPER
+            document.getElementById('btn-capture').addEventListener('click', () => {
+                const imageData = ImageProcessor.captureFrame(Camera.videoElement);
+                Camera.stop();
+                
+                const imgElement = document.getElementById('image-to-crop');
+                imgElement.src = imageData;
+                
+                AppState.set('CROPPER');
+                
+                if (cropper) cropper.destroy();
+                cropper = new Cropper(imgElement, {
+                    viewMode: 1,
+                    dragMode: 'crop',
+                    autoCropArea: 0.8,
+                    background: false
+                });
             });
-        }
 
-        function speakText() {
-            // Interrompe se já estiver falando
-            window.speechSynthesis.cancel();
-            
-            const textToSpeak = activeTab === 'original' ? currentTextOriginal : currentTextTraduzido;
-            if(!textToSpeak || textToSpeak === "Clique em Traduzir para ver o resultado.") return;
+            // 2. RECORTAR E EXTRAIR TEXTO
+            document.getElementById('btn-process-crop').addEventListener('click', async () => {
+                AppState.set('PROCESSING');
+                const enhancedCanvas = ImageProcessor.getEnhancedCroppedData();
+                const selectedOcrLang = document.getElementById('ocr-lang-select').value;
 
-            const utterance = new SpeechSynthesisUtterance(textToSpeak);
-            
-            // Define o idioma da voz baseada na aba ativa
-            if (activeTab === 'traducao') {
-                utterance.lang = document.getElementById('target-language').value; // pt, en, es...
-            } else {
-                utterance.lang = 'en-US'; // Tenta inglês como base para o original, ou auto.
-            }
-            
-            window.speechSynthesis.speak(utterance);
-        }
+                try {
+                    const text = await OCR.recognize(enhancedCanvas, selectedOcrLang);
+                    if (text.length < 2) {
+                        document.getElementById('error-msg').innerText = "Não conseguimos identificar texto claro na área recortada.";
+                        AppState.set('ERROR');
+                        return;
+                    }
+                    
+                    document.getElementById('result-text-original').value = text;
+                    document.getElementById('result-text-traducao').value = ""; // limpa tradução antiga
+                    Tabs.switch('original');
+                    AppState.set('RESULT');
+                } catch (error) {
+                    document.getElementById('error-msg').innerText = "Ocorreu um erro no processamento.";
+                    AppState.set('ERROR');
+                }
+            });
 
-        // 6. RESETAR APLICATIVO
-        function resetApp() {
-            window.speechSynthesis.cancel();
-            if(cropper) cropper.destroy();
-            imageInput.value = "";
-            elCropper.style.display = 'none';
-            elLoading.style.display = 'none';
-            elResults.style.display = 'none';
-            elUpload.style.display = 'block';
-        }
+            // Eventos de Câmera
+            document.getElementById('btn-switch-cam').addEventListener('click', () => Camera.toggleCamera());
+            document.getElementById('btn-flash').addEventListener('click', () => Camera.toggleFlash());
+            
+            // Eventos de Navegação
+            document.getElementById('btn-retake').addEventListener('click', () => {
+                document.getElementById('progress-bar').style.width = '0%';
+                document.getElementById('progress-text').innerText = '0%';
+                AppState.set('CAMERA_READY');
+            });
+            document.getElementById('btn-retry').addEventListener('click', () => AppState.set('CAMERA_READY'));
+
+            // Eventos de Ação (Textos)
+            document.getElementById('btn-copy').addEventListener('click', Actions.copy);
+            document.getElementById('btn-share').addEventListener('click', Actions.share);
+            document.getElementById('btn-download').addEventListener('click', Actions.downloadTXT);
+            document.getElementById('btn-translate').addEventListener('click', Actions.translate);
+            document.getElementById('btn-speak').addEventListener('click', Actions.speak);
+
+            document.getElementById('result-text-original').addEventListener('input', Actions.updateStats);
+            document.getElementById('result-text-traducao').addEventListener('input', Actions.updateStats);
+        });
     </script>
 </body>
 </html>
