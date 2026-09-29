@@ -31,6 +31,7 @@
             --secondary: #6c757d;
             --warning: #ffc107;
             --purple: #8b5cf6;
+            --red: #ef4444;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
@@ -165,7 +166,7 @@
 
     <header>
         <h3><i class="fa-solid fa-expand"></i> MEU OCR</h3>
-        <!-- Códigos de idioma do OCR.Space e Mapeamento -->
+        <!-- Códigos de idioma AMPLIADOS -->
         <select id="ocr-lang-select" class="lang-select-camera">
             <option value="por" selected>Ler: Português</option>
             <option value="eng">Ler: Inglês</option>
@@ -173,6 +174,11 @@
             <option value="fre">Ler: Francês</option>
             <option value="ger">Ler: Alemão</option>
             <option value="ita">Ler: Italiano</option>
+            <option value="jpn">Ler: Japonês</option>
+            <option value="chs">Ler: Chinês</option>
+            <option value="rus">Ler: Russo</option>
+            <option value="ara">Ler: Árabe</option>
+            <option value="kor">Ler: Coreano</option>
         </select>
     </header>
 
@@ -182,23 +188,18 @@
         <div class="camera-overlay"><div class="frame"></div></div>
         
         <div class="camera-controls">
-            <!-- Galeria -->
             <label for="gallery-input" class="btn-icon" style="cursor: pointer;" title="Abrir da Galeria">
                 <i class="fa-regular fa-image"></i>
             </label>
             <input type="file" id="gallery-input" accept="image/*" style="position: absolute; opacity: 0; width: 1px; height: 1px; z-index: -1;">
 
-            <!-- Botão de Captura -->
             <button id="btn-capture" class="btn-capture" title="Escanear Texto"></button>
 
-            <!-- Botão de Transcrição por Voz (Home Screen) -->
             <button id="btn-home-dictate" class="btn-icon purple" title="Transcrever Fala">
                 <i class="fa-solid fa-microphone"></i>
             </button>
 
-            <!-- Botão de Inverter Câmera -->
             <button id="btn-switch-cam" class="btn-icon"><i class="fa-solid fa-camera-rotate"></i></button>
-            
             <button id="btn-flash" class="btn-icon hidden" style="position:absolute; top: -50px; right: 20px;"><i class="fa-solid fa-bolt"></i></button>
         </div>
         <canvas id="capture-canvas" class="hidden"></canvas>
@@ -240,6 +241,7 @@
         
         <!-- Controles de Tradução -->
         <div class="translate-group" id="translate-controls">
+            <!-- Códigos de destino AMPLIADOS -->
             <select id="target-lang-select">
                 <option value="pt" selected>Para: Português 🇧🇷</option>
                 <option value="en">Para: Inglês 🇺🇸</option>
@@ -247,6 +249,11 @@
                 <option value="fr">Para: Francês 🇫🇷</option>
                 <option value="de">Para: Alemão 🇩🇪</option>
                 <option value="it">Para: Italiano 🇮🇹</option>
+                <option value="ja">Para: Japonês 🇯🇵</option>
+                <option value="zh-CN">Para: Chinês 🇨🇳</option>
+                <option value="ru">Para: Russo 🇷🇺</option>
+                <option value="ar">Para: Árabe 🇸🇦</option>
+                <option value="ko">Para: Coreano 🇰🇷</option>
             </select>
             <button id="btn-translate" class="btn btn-warning"><i class="fa-solid fa-language"></i> Traduzir</button>
         </div>
@@ -279,6 +286,11 @@
     </div>
 
     <script>
+        // FORÇA O NAVEGADOR A CARREGAR AS VOZES PREMIUM EM SEGUNDO PLANO LOGO QUE ABRE
+        window.speechSynthesis.onvoiceschanged = () => {
+            window.speechSynthesis.getVoices();
+        };
+
         // PWA SETUP
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -286,16 +298,17 @@
 
         let cropper = null;
 
-        // --- MAPA DINÂMICO DE IDIOMAS ---
-        // Converte as siglas da API para o padrão universal de Voz/Ditado do Google/Apple
+        // --- MAPA DINÂMICO DE IDIOMAS (11 IDIOMAS) ---
         const LanguageCodes = {
             ocrToSpeech: {
-                'por': 'pt-BR', 'eng': 'en-US', 'spa': 'es-ES',
-                'fre': 'fr-FR', 'ger': 'de-DE', 'ita': 'it-IT'
+                'por': 'pt-BR', 'eng': 'en-US', 'spa': 'es-ES', 'fre': 'fr-FR', 
+                'ger': 'de-DE', 'ita': 'it-IT', 'jpn': 'ja-JP', 'chs': 'zh-CN', 
+                'rus': 'ru-RU', 'ara': 'ar-SA', 'kor': 'ko-KR'
             },
             translateToSpeech: {
-                'pt': 'pt-BR', 'en': 'en-US', 'es': 'es-ES',
-                'fr': 'fr-FR', 'de': 'de-DE', 'it': 'it-IT'
+                'pt': 'pt-BR', 'en': 'en-US', 'es': 'es-ES', 'fr': 'fr-FR', 
+                'de': 'de-DE', 'it': 'it-IT', 'ja': 'ja-JP', 'zh-CN': 'zh-CN', 
+                'ru': 'ru-RU', 'ar': 'ar-SA', 'ko': 'ko-KR'
             }
         };
 
@@ -461,7 +474,7 @@
                 
                 this.recognition = new SpeechRecognition();
                 this.recognition.continuous = true;
-                this.recognition.interimResults = false; // Desativado para evitar frases repetidas no celular
+                this.recognition.interimResults = false; 
                 
                 this.recognition.onresult = (event) => {
                     let finalTranscript = '';
@@ -476,10 +489,7 @@
                     if (transcript) {
                         let now = Date.now();
                         
-                        // Anti-Bug: Ignora textos idênticos enviados em menos de 1.5s
-                        if (this.lastTranscript === transcript && (now - this.lastTime) < 1500) {
-                            return; 
-                        }
+                        if (this.lastTranscript === transcript && (now - this.lastTime) < 1500) return; 
                         this.lastTranscript = transcript;
                         this.lastTime = now;
 
@@ -489,7 +499,6 @@
                         if (currentVal.length > 0 && !currentVal.endsWith(' ') && !currentVal.endsWith('\n')) {
                             currentVal += ' ';
                         }
-                        
                         if (currentVal.length === 0) {
                             transcript = transcript.charAt(0).toUpperCase() + transcript.slice(1);
                         }
@@ -518,7 +527,6 @@
                 if (this.isRecording) {
                     this.stop();
                 } else {
-                    // IDIOMA DINÂMICO PARA O MICROFONE DEPENDENDO DA ABA
                     if (Tabs.active === 'original') {
                         const ocrCode = document.getElementById('ocr-lang-select').value;
                         this.recognition.lang = LanguageCodes.ocrToSpeech[ocrCode] || 'pt-BR';
@@ -607,27 +615,68 @@
                 }
                 btn.innerHTML = '<i class="fa-solid fa-language"></i> Traduzir';
             },
+            
+            // --- O NOVO CAÇADOR DE VOZES PREMIUM ---
+            getBestVoice(langCode) {
+                const voices = window.speechSynthesis.getVoices();
+                if (!voices || voices.length === 0) return null;
+
+                // Filtra as vozes que pertencem ao idioma pedido (ex: apenas vozes pt-BR)
+                const baseLang = langCode.split('-')[0];
+                const langVoices = voices.filter(v => v.lang.startsWith(baseLang));
+                if (langVoices.length === 0) return null;
+
+                // Procura palavras-chave de vozes de alta qualidade (Google Neurais, Apple Premium)
+                let bestVoice = langVoices.find(v => 
+                    v.name.includes('Google') || 
+                    v.name.includes('Premium') || 
+                    v.name.includes('Natural') || 
+                    v.name.includes('Online')
+                );
+
+                // Se não achar a Premium, pega a voz padrão do idioma exato
+                if (!bestVoice) {
+                    bestVoice = langVoices.find(v => v.lang === langCode) || langVoices[0];
+                }
+
+                return bestVoice;
+            },
+
             speak() {
                 window.speechSynthesis.cancel();
                 const text = Tabs.active === 'original' ? document.getElementById('result-text-original').value : document.getElementById('result-text-traducao').value;
                 if(!text) return;
 
                 const utterance = new SpeechSynthesisUtterance(text);
+                let targetLang = 'pt-BR';
                 
-                // IDIOMA DINÂMICO PARA O ALTO-FALANTE DEPENDENDO DA ABA
                 if (Tabs.active === 'traducao') {
                     const targetCode = document.getElementById('target-lang-select').value;
-                    utterance.lang = LanguageCodes.translateToSpeech[targetCode] || 'pt-BR';
+                    targetLang = LanguageCodes.translateToSpeech[targetCode] || 'pt-BR';
                 } else {
                     const ocrCode = document.getElementById('ocr-lang-select').value;
-                    utterance.lang = LanguageCodes.ocrToSpeech[ocrCode] || 'pt-BR';
+                    targetLang = LanguageCodes.ocrToSpeech[ocrCode] || 'pt-BR';
                 }
+                
+                utterance.lang = targetLang;
+                
+                // Aplica a voz mais bonita/premium disponível no celular
+                const bestVoice = this.getBestVoice(targetLang);
+                if (bestVoice) {
+                    utterance.voice = bestVoice;
+                }
+                
+                // Deixa a voz mais orgânica e menos apressada (parecendo narração humana)
+                utterance.rate = 0.95; // 5% mais devagar
+                utterance.pitch = 1.05; // Levemente mais aguda/limpa
+
                 window.speechSynthesis.speak(utterance);
             },
+            
             clear() {
                 const textArea = Tabs.active === 'original' ? document.getElementById('result-text-original') : document.getElementById('result-text-traducao');
                 if (textArea.value.trim() !== '') {
-                    if (confirm("Deseja apagar todo o texto desta aba?")) {
+                    if (confirm("Tem certeza que deseja apagar todo o texto desta aba?")) {
                         textArea.value = '';
                         this.updateStats();
                     }
@@ -639,7 +688,7 @@
                 const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
-                link.download = 'Texto_OCR.txt';
+                link.download = 'Texto_Extraido.txt';
                 link.click();
             },
             updateStats() {
@@ -741,17 +790,16 @@
             });
             document.getElementById('btn-retry').addEventListener('click', () => AppState.set('CAMERA_READY'));
 
-            document.getElementById('btn-copy').addEventListener('click', Actions.copy);
-            document.getElementById('btn-share').addEventListener('click', Actions.share);
-            document.getElementById('btn-translate').addEventListener('click', Actions.translate);
-            document.getElementById('btn-speak').addEventListener('click', Actions.speak);
-            document.getElementById('btn-dictate').addEventListener('click', () => Dictation.toggle());
-            
-            // Evento do botão Limpar
+            document.getElementById('btn-copy').addEventListener('click', () => Actions.copy());
+            document.getElementById('btn-share').addEventListener('click', () => Actions.share());
+            document.getElementById('btn-translate').addEventListener('click', () => Actions.translate());
+            document.getElementById('btn-speak').addEventListener('click', () => Actions.speak());
             document.getElementById('btn-clear').addEventListener('click', () => Actions.clear());
+            document.getElementById('btn-download').addEventListener('click', () => Actions.downloadTXT());
+            document.getElementById('btn-dictate').addEventListener('click', () => Dictation.toggle());
 
-            document.getElementById('result-text-original').addEventListener('input', Actions.updateStats);
-            document.getElementById('result-text-traducao').addEventListener('input', Actions.updateStats);
+            document.getElementById('result-text-original').addEventListener('input', () => Actions.updateStats());
+            document.getElementById('result-text-traducao').addEventListener('input', () => Actions.updateStats());
         });
     </script>
 </body>
