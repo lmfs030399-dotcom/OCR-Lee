@@ -188,17 +188,21 @@
         <div class="camera-overlay"><div class="frame"></div></div>
         
         <div class="camera-controls">
+            <!-- Galeria -->
             <label for="gallery-input" class="btn-icon" style="cursor: pointer;" title="Abrir da Galeria">
                 <i class="fa-regular fa-image"></i>
             </label>
             <input type="file" id="gallery-input" accept="image/*" style="position: absolute; opacity: 0; width: 1px; height: 1px; z-index: -1;">
 
+            <!-- Botão de Captura -->
             <button id="btn-capture" class="btn-capture" title="Escanear Texto"></button>
 
+            <!-- Botão de Transcrição por Voz (Home Screen) -->
             <button id="btn-home-dictate" class="btn-icon purple" title="Transcrever Fala">
                 <i class="fa-solid fa-microphone"></i>
             </button>
 
+            <!-- Botão de Inverter Câmera -->
             <button id="btn-switch-cam" class="btn-icon"><i class="fa-solid fa-camera-rotate"></i></button>
             <button id="btn-flash" class="btn-icon hidden" style="position:absolute; top: -50px; right: 20px;"><i class="fa-solid fa-bolt"></i></button>
         </div>
@@ -241,7 +245,6 @@
         
         <!-- Controles de Tradução -->
         <div class="translate-group" id="translate-controls">
-            <!-- Códigos de destino AMPLIADOS -->
             <select id="target-lang-select">
                 <option value="pt" selected>Para: Português 🇧🇷</option>
                 <option value="en">Para: Inglês 🇺🇸</option>
@@ -286,7 +289,7 @@
     </div>
 
     <script>
-        // FORÇA O NAVEGADOR A CARREGAR AS VOZES PREMIUM EM SEGUNDO PLANO LOGO QUE ABRE
+        // Carrega as vozes antecipadamente
         window.speechSynthesis.onvoiceschanged = () => {
             window.speechSynthesis.getVoices();
         };
@@ -298,7 +301,7 @@
 
         let cropper = null;
 
-        // --- MAPA DINÂMICO DE IDIOMAS (11 IDIOMAS) ---
+        // MAPA DINÂMICO DE IDIOMAS
         const LanguageCodes = {
             ocrToSpeech: {
                 'por': 'pt-BR', 'eng': 'en-US', 'spa': 'es-ES', 'fre': 'fr-FR', 
@@ -488,7 +491,6 @@
                     
                     if (transcript) {
                         let now = Date.now();
-                        
                         if (this.lastTranscript === transcript && (now - this.lastTime) < 1500) return; 
                         this.lastTranscript = transcript;
                         this.lastTime = now;
@@ -616,25 +618,33 @@
                 btn.innerHTML = '<i class="fa-solid fa-language"></i> Traduzir';
             },
             
-            // --- O NOVO CAÇADOR DE VOZES PREMIUM ---
+            // --- NOVO CAÇADOR DE VOZES PREMIUM ---
             getBestVoice(langCode) {
                 const voices = window.speechSynthesis.getVoices();
                 if (!voices || voices.length === 0) return null;
 
-                // Filtra as vozes que pertencem ao idioma pedido (ex: apenas vozes pt-BR)
                 const baseLang = langCode.split('-')[0];
                 const langVoices = voices.filter(v => v.lang.startsWith(baseLang));
                 if (langVoices.length === 0) return null;
 
-                // Procura palavras-chave de vozes de alta qualidade (Google Neurais, Apple Premium)
+                // Força a busca das vozes mais naturais em Português
+                if (baseLang === 'pt') {
+                    const vipVoices = ['Google português do Brasil', 'Luciana', 'Francisca Online', 'Raquel', 'Vitoria', 'Premium'];
+                    for (let vip of vipVoices) {
+                        const found = langVoices.find(v => v.name.includes(vip));
+                        if (found) return found;
+                    }
+                }
+
+                // Tenta achar qualquer voz premium para os outros idiomas
                 let bestVoice = langVoices.find(v => 
                     v.name.includes('Google') || 
                     v.name.includes('Premium') || 
                     v.name.includes('Natural') || 
-                    v.name.includes('Online')
+                    v.name.includes('Online') ||
+                    v.name.includes('Enhanced')
                 );
 
-                // Se não achar a Premium, pega a voz padrão do idioma exato
                 if (!bestVoice) {
                     bestVoice = langVoices.find(v => v.lang === langCode) || langVoices[0];
                 }
@@ -660,15 +670,15 @@
                 
                 utterance.lang = targetLang;
                 
-                // Aplica a voz mais bonita/premium disponível no celular
+                // Aplica a voz de alta qualidade
                 const bestVoice = this.getBestVoice(targetLang);
                 if (bestVoice) {
                     utterance.voice = bestVoice;
                 }
                 
-                // Deixa a voz mais orgânica e menos apressada (parecendo narração humana)
-                utterance.rate = 0.95; // 5% mais devagar
-                utterance.pitch = 1.05; // Levemente mais aguda/limpa
+                // Deixa o ritmo de leitura mais parecido com o de um humano lendo um audiolivro
+                utterance.rate = 0.88; 
+                utterance.pitch = 1.0; 
 
                 window.speechSynthesis.speak(utterance);
             },
