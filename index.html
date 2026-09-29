@@ -98,6 +98,7 @@
             display: flex; justify-content: center; align-items: center; transition: 0.2s;
         }
         .btn-icon:active { transform: scale(0.9); }
+        .btn-icon.purple { background: var(--purple); }
 
         /* 2. TELA DE RECORTE (CROPPER) */
         #cropper-screen { padding-top: 60px; display: flex; flex-direction: column; }
@@ -178,16 +179,27 @@
     <div id="camera-screen" class="screen">
         <video id="camera-video" autoplay playsinline></video>
         <div class="camera-overlay"><div class="frame"></div></div>
+        
+        <!-- CONTROLES DA CÂMERA (AGORA COM BOTÃO DE DITADO DIRETO) -->
         <div class="camera-controls">
-            <!-- Galeria -->
-            <label for="gallery-input" class="btn-icon" style="cursor: pointer;">
+            <!-- Botão de Galeria -->
+            <label for="gallery-input" class="btn-icon" style="cursor: pointer;" title="Abrir da Galeria">
                 <i class="fa-regular fa-image"></i>
             </label>
             <input type="file" id="gallery-input" accept="image/*" style="position: absolute; opacity: 0; width: 1px; height: 1px; z-index: -1;">
 
-            <button id="btn-flash" class="btn-icon hidden"><i class="fa-solid fa-bolt"></i></button>
-            <button id="btn-capture" class="btn-capture"></button>
+            <!-- Botão de Captura -->
+            <button id="btn-capture" class="btn-capture" title="Escanear Texto"></button>
+
+            <!-- Botão de Transcrição por Voz (Home Screen) -->
+            <button id="btn-home-dictate" class="btn-icon purple" title="Transcrever Fala">
+                <i class="fa-solid fa-microphone"></i>
+            </button>
+
+            <!-- Botão de Inverter Câmera -->
             <button id="btn-switch-cam" class="btn-icon"><i class="fa-solid fa-camera-rotate"></i></button>
+            
+            <button id="btn-flash" class="btn-icon hidden" style="position:absolute; top: -50px; right: 20px;"><i class="fa-solid fa-bolt"></i></button>
         </div>
         <canvas id="capture-canvas" class="hidden"></canvas>
     </div>
@@ -219,7 +231,7 @@
             <div class="tab" id="tab-traducao" onclick="Tabs.switch('traducao')">Tradução</div>
         </div>
 
-        <textarea id="result-text-original" spellcheck="false"></textarea>
+        <textarea id="result-text-original" spellcheck="false" placeholder="Seu texto aparecerá aqui..."></textarea>
         <textarea id="result-text-traducao" spellcheck="false" class="hidden" placeholder="O texto traduzido aparecerá aqui..."></textarea>
         
         <div class="stats">
@@ -242,7 +254,7 @@
             <button id="btn-speak" class="btn btn-purple"><i class="fa-solid fa-volume-high"></i> Ouvir</button>
             <button id="btn-copy" class="btn btn-primary"><i class="fa-regular fa-copy"></i> Copiar</button>
             <button id="btn-share" class="btn btn-primary"><i class="fa-solid fa-share-nodes"></i> Compartilhar</button>
-            <button id="btn-retake" class="btn btn-success btn-full"><i class="fa-solid fa-camera"></i> Nova Captura</button>
+            <button id="btn-retake" class="btn btn-success btn-full"><i class="fa-solid fa-house"></i> Voltar ao Início</button>
         </div>
     </div>
 
@@ -353,7 +365,6 @@
             },
             getCroppedBase64() {
                 if(!cropper) return null;
-                // Pega a imagem APENAS RECORTADA, pura, para a API Profissional ler
                 return cropper.getCroppedCanvas({
                     imageSmoothingEnabled: true,
                     imageSmoothingQuality: 'high'
@@ -361,12 +372,9 @@
             }
         };
 
-        // --- NOVA API CLOUD (OCR.Space) ---
-        // Isso resolve o problema das "alucinações" do Tesseract no navegador do celular
+        // --- API CLOUD (OCR.Space) ---
         const OCR = {
             recognize: async function(imageBase64, lang) {
-                
-                // Simulação de Progresso para a interface não parecer travada
                 let pct = 10;
                 const progressInterval = setInterval(() => {
                     pct = pct < 90 ? pct + 10 : pct;
@@ -375,14 +383,13 @@
                 }, 400);
 
                 try {
-                    // Prepara os dados para enviar para a API
                     const formData = new FormData();
                     formData.append("base64Image", imageBase64);
                     formData.append("language", lang);
-                    formData.append("apikey", "helloworld"); // Chave pública de teste. 
+                    formData.append("apikey", "helloworld"); 
                     formData.append("isOverlayRequired", "false");
-                    formData.append("scale", "true"); // A própria API aumenta a escala se necessário
-                    formData.append("OCREngine", "1"); // Engine 1 é a mais estável e legível
+                    formData.append("scale", "true"); 
+                    formData.append("OCREngine", "1"); 
 
                     const response = await fetch("https://api.ocr.space/parse/image", {
                         method: "POST",
@@ -399,7 +406,6 @@
                         throw new Error("Erro na API.");
                     }
 
-                    // Extrai o texto da resposta da API
                     let extractedText = "";
                     if (json.ParsedResults && json.ParsedResults.length > 0) {
                         extractedText = json.ParsedResults[0].ParsedText;
@@ -413,33 +419,15 @@
                 }
             },
             
-            // --- O ALGORITMO MÁGICO DE FLUIDEZ DE TEXTO (Aprimorado) ---
             cleanText(text) {
                 if (!text) return "";
-                
                 let cleaned = text;
-
-                // 1. Limpa alguns lixos residuais mantendo acentuações e pontuações úteis
                 cleaned = cleaned.replace(/[|~^\\_§©®™=*+`]/g, '');
-
-                // 2. União de Palavras (Hífen no fim da linha)
-                // Pega coisas como: "parale- \n lepípedo" e junta para "paralelepípedo"
                 cleaned = cleaned.replace(/([a-zA-Zá-úÁ-Ú])-[\s]*\r?\n[\s]*([a-zA-Zá-úÁ-Ú])/g, '$1$2');
-
-                // 3. O SEGREDO DO PARÁGRAFO (Smart Text Flow)
-                // Se a API retornar quebras duplas (\r\n\r\n), marcamos como PARAGRAFO real
                 cleaned = cleaned.replace(/(\r?\n){2,}/g, '[[PARAGRAFO]]');
-
-                // 4. Transformação da Quebra Seca em Espaço
-                // O \r\n solitário no meio da frase vira espaço. O texto volta a fluir
                 cleaned = cleaned.replace(/\r?\n/g, ' ');
-
-                // 5. Restaura os parágrafos reais
                 cleaned = cleaned.replace(/\[\[PARAGRAFO\]\]/g, '\n\n');
-
-                // 6. Limpa múltiplos espaços deixados para trás
                 cleaned = cleaned.replace(/ {2,}/g, ' ');
-
                 return cleaned.trim();
             }
         };
@@ -480,7 +468,7 @@
             },
             toggle() {
                 if (!this.recognition && !this.init()) {
-                    alert("Seu navegador não suporta digitação por voz.");
+                    alert("Seu navegador não suporta digitação por voz. Tente usar o Google Chrome ou Safari.");
                     return;
                 }
                 
@@ -617,6 +605,22 @@
                 });
             });
 
+            // --- AÇÃO DO NOVO BOTÃO DE DITADO (TELA INICIAL) ---
+            document.getElementById('btn-home-dictate').addEventListener('click', () => {
+                Camera.stop();
+                document.getElementById('result-text-original').value = ""; // Limpa a caixa de texto
+                document.getElementById('result-text-traducao').value = "";
+                Tabs.switch('original');
+                AppState.set('RESULT');
+                
+                // Dá um pequeno atraso para a tela de resultados carregar antes de iniciar o gravador
+                setTimeout(() => {
+                    if (!Dictation.isRecording) {
+                        Dictation.toggle();
+                    }
+                }, 300);
+            });
+
             function handleImageUpload(e) {
                 if (e.target.files && e.target.files.length > 0) {
                     const reader = new FileReader();
@@ -643,7 +647,6 @@
             document.getElementById('btn-process-crop').addEventListener('click', async () => {
                 AppState.set('PROCESSING');
                 
-                // Extrai a imagem puramente recortada
                 const imageBase64 = ImageProcessor.getCroppedBase64();
                 const selectedOcrLang = document.getElementById('ocr-lang-select').value;
 
