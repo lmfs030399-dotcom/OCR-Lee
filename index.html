@@ -125,7 +125,7 @@
         .tab.active { background: var(--surface); color: var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
 
         textarea {
-            width: 100%; height: 200px; background: var(--surface); color: white;
+            width: 100%; height: 250px; background: var(--surface); color: white;
             border: 1px solid #333; border-radius: 8px; padding: 15px;
             font-size: 15px; resize: none; margin-bottom: 5px; line-height: 1.6;
         }
@@ -170,12 +170,10 @@
         <video id="camera-video" autoplay playsinline></video>
         <div class="camera-overlay"><div class="frame"></div></div>
         <div class="camera-controls">
-            
-            <!-- SOLUÇÃO MOBILE: Usamos <label> ligado diretamente ao input file -->
+            <!-- Galeria -->
             <label for="gallery-input" class="btn-icon" style="cursor: pointer;">
                 <i class="fa-regular fa-image"></i>
             </label>
-            <!-- Input file escondido visualmente, mas presente no DOM para os celulares aceitarem o clique -->
             <input type="file" id="gallery-input" accept="image/*" style="position: absolute; opacity: 0; width: 1px; height: 1px; z-index: -1;">
 
             <button id="btn-flash" class="btn-icon hidden"><i class="fa-solid fa-bolt"></i></button>
@@ -316,7 +314,7 @@
                     if (capabilities.torch) btnFlash.classList.remove('hidden');
                     else btnFlash.classList.add('hidden');
                 } catch (err) {
-                    document.getElementById('error-msg').innerText = "Verifique as permissões de câmera do navegador.";
+                    document.getElementById('error-msg').innerText = "Verifique as permissões de câmera do navegador ou use a Galeria.";
                     AppState.set('ERROR');
                 }
             },
@@ -348,15 +346,24 @@
             getEnhancedCroppedData() {
                 if(!cropper) return null;
                 const croppedCanvas = cropper.getCroppedCanvas();
-                const processedCanvas = document.createElement('canvas');
-                const ctx = processedCanvas.getContext('2d');
-                processedCanvas.width = croppedCanvas.width;
-                processedCanvas.height = croppedCanvas.height;
                 
-                ctx.filter = 'grayscale(100%) contrast(120%) brightness(105%)';
-                ctx.drawImage(croppedCanvas, 0, 0);
+                // 1. AUMENTAR RESOLUÇÃO (Upscaling)
+                // Fundamental para o Tesseract não errar letras pequenas ao recortar imagens
+                const scale = 2; 
+                const finalCanvas = document.createElement('canvas');
+                finalCanvas.width = croppedCanvas.width * scale;
+                finalCanvas.height = croppedCanvas.height * scale;
                 
-                return processedCanvas;
+                const ctx = finalCanvas.getContext('2d');
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                
+                // 2. FILTRO INTELIGENTE
+                // Apenas tons de cinza e um contraste equilibrado para não estourar o brilho das letras
+                ctx.filter = 'grayscale(100%) contrast(140%)';
+                ctx.drawImage(croppedCanvas, 0, 0, finalCanvas.width, finalCanvas.height);
+                
+                return finalCanvas;
             }
         };
 
@@ -370,7 +377,9 @@
                     this.worker = await Tesseract.createWorker(lang, 1, {
                         logger: m => this.updateProgress(m)
                     });
-                    await this.worker.setParameters({ tessedit_pageseg_mode: '3' });
+                    // MUDANÇA: PSM 6 (Assume que a imagem recortada é um bloco único de texto)
+                    // Evita que ele tente criar colunas falsas e quebre os parágrafos.
+                    await this.worker.setParameters({ tessedit_pageseg_mode: '6' });
                     this.currentLanguage = lang;
                 }
             },
@@ -395,12 +404,19 @@
             cleanText(text) {
                 if (!text) return "";
                 
-                // REGEX PODEROSO: Remove caracteres lixo
-                let cleaned = text.replace(/[^\w\sÀ-ÿ.,!?@()\-:;$€£%'"/]/g, ' ');
-                cleaned = cleaned.replace(/ {2,}/g, ' ');
-                cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
+                // 1. Remove qualquer "lixo" criado por sombras e texturas da foto (mantém os \n)
+                let cleaned = text.replace(/[^\w\sÀ-ÿ.,!?@()\-:;$€£%'"/\n]/g, '');
                 
-                return cleaned;
+                // 2. Junta palavras que foram separadas por hífen no final da linha (Ex: ferra- \n menta -> ferramenta)
+                cleaned = cleaned.replace(/-\s*\n/g, '');
+                
+                // 3. Remove excesso de espaços no meio das frases, MAS PRESERVA as quebras de linha (\n)
+                cleaned = cleaned.replace(/ +/g, ' ');
+                
+                // 4. Padroniza os parágrafos (limita a no máximo 2 quebras de linha juntas para ficar bonito)
+                cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+                
+                return cleaned.trim();
             }
         };
 
@@ -518,12 +534,12 @@
                 });
             });
 
-            // --- SOLUÇÃO PARA A GALERIA (CELULAR E PC) ---
+            // --- LÓGICA DA GALERIA ---
             function handleImageUpload(e) {
                 if (e.target.files && e.target.files.length > 0) {
                     const reader = new FileReader();
                     reader.onload = function(event) {
-                        Camera.stop(); // Desliga a câmera para poupar bateria
+                        Camera.stop(); // Desliga a câmera
                         
                         const imgElement = document.getElementById('image-to-crop');
                         imgElement.src = event.target.result;
@@ -540,10 +556,9 @@
                     };
                     reader.readAsDataURL(e.target.files[0]);
                 }
-                e.target.value = ''; // Reseta para permitir escolher a mesma foto depois
+                e.target.value = ''; 
             }
 
-            // Conecta o manipulador aos dois inputs de galeria (Câmera e Erro)
             document.getElementById('gallery-input').addEventListener('change', handleImageUpload);
             document.getElementById('gallery-input-error').addEventListener('change', handleImageUpload);
 
