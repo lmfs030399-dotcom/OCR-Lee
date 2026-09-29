@@ -347,9 +347,9 @@
                 if(!cropper) return null;
                 const croppedCanvas = cropper.getCroppedCanvas();
                 
-                // 1. AUMENTAR RESOLUÇÃO (Upscaling)
-                // Fundamental para o Tesseract não errar letras pequenas ao recortar imagens
-                const scale = 2; 
+                // 1. UPSCALE: Aumenta o tamanho da imagem em 2.5x
+                // Isso resolve o problema de o OCR não conseguir ler letras pequenas ou fundir "r" com "n"
+                const scale = 2.5; 
                 const finalCanvas = document.createElement('canvas');
                 finalCanvas.width = croppedCanvas.width * scale;
                 finalCanvas.height = croppedCanvas.height * scale;
@@ -358,9 +358,8 @@
                 ctx.imageSmoothingEnabled = true;
                 ctx.imageSmoothingQuality = 'high';
                 
-                // 2. FILTRO INTELIGENTE
-                // Apenas tons de cinza e um contraste equilibrado para não estourar o brilho das letras
-                ctx.filter = 'grayscale(100%) contrast(140%)';
+                // 2. FILTRO ESTILO "SCANNER DE DOCUMENTO": Deixa a imagem super nítida
+                ctx.filter = 'grayscale(100%) contrast(150%) brightness(110%)';
                 ctx.drawImage(croppedCanvas, 0, 0, finalCanvas.width, finalCanvas.height);
                 
                 return finalCanvas;
@@ -377,9 +376,9 @@
                     this.worker = await Tesseract.createWorker(lang, 1, {
                         logger: m => this.updateProgress(m)
                     });
-                    // MUDANÇA: PSM 6 (Assume que a imagem recortada é um bloco único de texto)
-                    // Evita que ele tente criar colunas falsas e quebre os parágrafos.
-                    await this.worker.setParameters({ tessedit_pageseg_mode: '6' });
+                    
+                    // PSM 3 é o modo padrão de auto-detecção de parágrafos.
+                    await this.worker.setParameters({ tessedit_pageseg_mode: '3' });
                     this.currentLanguage = lang;
                 }
             },
@@ -401,19 +400,30 @@
                     throw new Error("Falha ao processar.");
                 }
             },
+            
+            // O ALGORITMO MÁGICO PARA TEXTO FLUIDO E CORRETO
             cleanText(text) {
                 if (!text) return "";
                 
-                // 1. Remove qualquer "lixo" criado por sombras e texturas da foto (mantém os \n)
-                let cleaned = text.replace(/[^\w\sÀ-ÿ.,!?@()\-:;$€£%'"/\n]/g, '');
-                
-                // 2. Junta palavras que foram separadas por hífen no final da linha (Ex: ferra- \n menta -> ferramenta)
-                cleaned = cleaned.replace(/-\s*\n/g, '');
-                
-                // 3. Remove excesso de espaços no meio das frases, MAS PRESERVA as quebras de linha (\n)
-                cleaned = cleaned.replace(/ +/g, ' ');
-                
-                // 4. Padroniza os parágrafos (limita a no máximo 2 quebras de linha juntas para ficar bonito)
+                let cleaned = text;
+
+                // 1. Limpeza de caracteres bizarros (mantém letras, números, pontuação e quebras de linha)
+                cleaned = cleaned.replace(/[|~^\\_§©®™=<>*+`]/g, '');
+
+                // 2. União de Sílabas: Se a palavra foi separada por hífen no fim da linha na foto, ele junta de volta.
+                // Exemplo: ferra- \n menta  -> ferramenta
+                cleaned = cleaned.replace(/([a-zA-Zá-úÁ-Ú])-[\s]*\n[\s]*([a-zA-Zá-úÁ-Ú])/g, '$1$2');
+
+                // 3. O SEGREDO DO TEXTO FLUIDO:
+                // Quando o OCR encontra o final físico da linha na foto, ele dá um "Enter".
+                // Essa fórmula abaixo substitui o "Enter" solitário no meio de frases por "Espaços".
+                // MAS preserva "Enters duplos", que é quando realmente existe uma troca de parágrafo.
+                cleaned = cleaned.replace(/([^\n])\n([^\n])/g, '$1 $2');
+
+                // 4. Remove espaços duplos extras que foram gerados
+                cleaned = cleaned.replace(/ {2,}/g, ' ');
+
+                // 5. Deixa o texto bonito: no máximo 2 Enters de distância entre os parágrafos reais
                 cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
                 
                 return cleaned.trim();
