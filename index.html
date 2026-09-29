@@ -34,6 +34,7 @@
             --secondary: #6c757d;
             --warning: #ffc107;
             --purple: #8b5cf6;
+            --red: #ef4444;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
@@ -60,6 +61,7 @@
         .lang-select-camera {
             background: #333; color: white; border: 1px solid #555; padding: 6px;
             border-radius: 5px; font-size: 13px; margin-right: 10px; outline: none;
+            max-width: 150px;
         }
 
         /* SCREENS */
@@ -125,11 +127,11 @@
         .tab.active { background: var(--surface); color: var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
 
         textarea {
-            width: 100%; height: 250px; background: var(--surface); color: white;
+            width: 100%; height: 200px; background: var(--surface); color: white;
             border: 1px solid #333; border-radius: 8px; padding: 15px;
             font-size: 15px; resize: none; margin-bottom: 5px; line-height: 1.6;
         }
-        .stats { font-size: 12px; color: #888; text-align: right; margin-bottom: 15px; }
+        .stats { display: flex; justify-content: space-between; font-size: 12px; color: #888; margin-bottom: 15px; }
         
         .translate-group { display: flex; gap: 10px; margin-bottom: 15px; }
         .translate-group select { flex: 1; padding: 12px; background: #2a2a2a; color: white; border: 1px solid #444; border-radius: 8px; outline: none; font-size: 14px;}
@@ -137,7 +139,7 @@
         .actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         
         .btn {
-            padding: 14px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+            padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
             cursor: pointer; color: white; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s;
         }
         .btn:active { transform: scale(0.98); }
@@ -146,11 +148,20 @@
         .btn-warning { background: var(--warning); color: #000;}
         .btn-purple { background: var(--purple); }
         .btn-success { background: var(--success); }
+        .btn-red { background: var(--red); }
         .btn-full { grid-column: span 2; }
 
         /* TELA DE ERRO */
         #error-screen { justify-content: center; align-items: center; padding: 20px; text-align: center; z-index: 50; }
         .error-icon { font-size: 50px; color: var(--danger); margin-bottom: 20px; }
+        
+        /* DITADO PULSANDO */
+        .recording { animation: pulse-red 1.5s infinite; background: var(--danger) !important; color: white !important;}
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+        }
     </style>
 </head>
 <body>
@@ -158,10 +169,10 @@
     <header>
         <h3><i class="fa-solid fa-expand"></i> MEU OCR</h3>
         <select id="ocr-lang-select" class="lang-select-camera">
-            <option value="por" selected>Idioma: Português</option>
-            <option value="eng">Inglês</option>
-            <option value="spa">Espanhol</option>
-            <option value="fra">Francês</option>
+            <option value="por" selected>Ler: Português</option>
+            <option value="eng">Ler: Inglês</option>
+            <option value="spa">Ler: Espanhol</option>
+            <option value="por+eng">Ler: PT + EN</option>
         </select>
     </header>
 
@@ -190,14 +201,14 @@
         </div>
         <div class="cropper-actions">
             <button class="btn btn-secondary" style="flex: 1;" onclick="AppState.set('CAMERA_READY')">Cancelar</button>
-            <button class="btn btn-primary" style="flex: 2;" id="btn-process-crop"><i class="fa-solid fa-check"></i> Extrair Texto</button>
+            <button class="btn btn-primary" style="flex: 2;" id="btn-process-crop"><i class="fa-solid fa-check"></i> Extrair</button>
         </div>
     </div>
 
     <!-- 3. TELA DE PROCESSAMENTO -->
     <div id="processing-screen" class="screen hidden">
         <div class="loader"></div>
-        <h2 id="process-status" style="font-size: 18px;">Lendo imagem...</h2>
+        <h2 id="process-status" style="font-size: 18px;">Analisando texto...</h2>
         <div class="progress-container"><div id="progress-bar" class="progress-bar"></div></div>
         <p id="progress-text" style="margin-top: 10px; font-size: 14px; color: #aaa;">0%</p>
     </div>
@@ -205,35 +216,34 @@
     <!-- 4. TELA DE RESULTADOS -->
     <div id="result-screen" class="screen hidden">
         
-        <!-- Abas -->
         <div class="tabs">
-            <div class="tab active" id="tab-original" onclick="Tabs.switch('original')">Original</div>
+            <div class="tab active" id="tab-original" onclick="Tabs.switch('original')">Texto Extraído</div>
             <div class="tab" id="tab-traducao" onclick="Tabs.switch('traducao')">Tradução</div>
         </div>
 
         <textarea id="result-text-original" spellcheck="false"></textarea>
-        <textarea id="result-text-traducao" spellcheck="false" class="hidden" placeholder="Clique em traduzir abaixo..."></textarea>
+        <textarea id="result-text-traducao" spellcheck="false" class="hidden" placeholder="O texto traduzido aparecerá aqui..."></textarea>
         
-        <div class="stats" id="text-stats">0 caracteres | 0 palavras</div>
+        <div class="stats">
+            <span id="text-stats">0 caracteres | 0 palavras</span>
+        </div>
         
-        <!-- Tradução Dinâmica -->
+        <!-- Controles de Tradução -->
         <div class="translate-group" id="translate-controls">
             <select id="target-lang-select">
                 <option value="pt" selected>Para: Português 🇧🇷</option>
                 <option value="en">Para: Inglês 🇺🇸</option>
                 <option value="es">Para: Espanhol 🇪🇸</option>
                 <option value="fr">Para: Francês 🇫🇷</option>
-                <option value="de">Para: Alemão 🇩🇪</option>
-                <option value="it">Para: Italiano 🇮🇹</option>
             </select>
             <button id="btn-translate" class="btn btn-warning"><i class="fa-solid fa-language"></i> Traduzir</button>
         </div>
 
         <div class="actions-grid">
-            <button id="btn-copy" class="btn btn-primary"><i class="fa-regular fa-copy"></i> Copiar</button>
+            <button id="btn-dictate" class="btn btn-secondary"><i class="fa-solid fa-microphone"></i> Ditar</button>
             <button id="btn-speak" class="btn btn-purple"><i class="fa-solid fa-volume-high"></i> Ouvir</button>
-            <button id="btn-share" class="btn btn-secondary"><i class="fa-solid fa-share-nodes"></i> Compartilhar</button>
-            <button id="btn-download" class="btn btn-secondary"><i class="fa-solid fa-download"></i> Salvar TXT</button>
+            <button id="btn-copy" class="btn btn-primary"><i class="fa-regular fa-copy"></i> Copiar</button>
+            <button id="btn-share" class="btn btn-primary"><i class="fa-solid fa-share-nodes"></i> Compartilhar</button>
             <button id="btn-retake" class="btn btn-success btn-full"><i class="fa-solid fa-camera"></i> Nova Captura</button>
         </div>
     </div>
@@ -241,17 +251,16 @@
     <!-- 5. TELA DE ERRO -->
     <div id="error-screen" class="screen hidden">
         <div class="error-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
-        <h2 id="error-title">Erro na Câmera</h2>
+        <h2 id="error-title">Atenção</h2>
         <p id="error-msg" style="margin: 15px 0; color: #aaa; font-size: 14px;">Não foi possível acessar a câmera.</p>
         
         <div style="display: flex; flex-direction: column; gap: 15px; width: 80%; max-width: 250px; margin: 0 auto;">
-            <!-- Opção de galeria disponível mesmo se a câmera der erro -->
             <label for="gallery-input-error" class="btn btn-primary" style="cursor: pointer;">
                 <i class="fa-regular fa-image"></i> Escolher da Galeria
             </label>
             <input type="file" id="gallery-input-error" accept="image/*" style="position: absolute; opacity: 0; width: 1px; height: 1px; z-index: -1;">
             
-            <button id="btn-retry" class="btn btn-secondary">Tentar Câmera Novamente</button>
+            <button id="btn-retry" class="btn btn-secondary">Tentar Câmera</button>
         </div>
     </div>
 
@@ -273,6 +282,7 @@
                     document.getElementById('camera-screen').classList.remove('hidden');
                     document.querySelector('header').classList.remove('hidden');
                     window.speechSynthesis.cancel(); 
+                    Dictation.stop();
                     Camera.start();
                 } 
                 else if (state === 'CROPPER') {
@@ -311,10 +321,10 @@
 
                     const capabilities = this.track.getCapabilities();
                     const btnFlash = document.getElementById('btn-flash');
-                    if (capabilities.torch) btnFlash.classList.remove('hidden');
+                    if (capabilities && capabilities.torch) btnFlash.classList.remove('hidden');
                     else btnFlash.classList.add('hidden');
                 } catch (err) {
-                    document.getElementById('error-msg').innerText = "Verifique as permissões de câmera do navegador ou use a Galeria.";
+                    document.getElementById('error-msg').innerText = "Verifique as permissões de câmera ou use a Galeria.";
                     AppState.set('ERROR');
                 }
             },
@@ -330,7 +340,7 @@
                 if (!this.track) return;
                 this.flashOn = !this.flashOn;
                 try { await this.track.applyConstraints({ advanced: [{ torch: this.flashOn }] }); } 
-                catch (e) { console.error("Erro no flash", e); }
+                catch (e) {}
             }
         };
 
@@ -347,86 +357,125 @@
                 if(!cropper) return null;
                 const croppedCanvas = cropper.getCroppedCanvas();
                 
-                // 1. UPSCALE: Aumenta o tamanho da imagem em 2.5x
-                // Isso resolve o problema de o OCR não conseguir ler letras pequenas ou fundir "r" com "n"
-                const scale = 2.5; 
+                // REDUZIDO o upscale para 1.5x (Garante velocidade sem perder muita qualidade)
+                const scale = 1.5; 
                 const finalCanvas = document.createElement('canvas');
                 finalCanvas.width = croppedCanvas.width * scale;
                 finalCanvas.height = croppedCanvas.height * scale;
                 
                 const ctx = finalCanvas.getContext('2d');
                 ctx.imageSmoothingEnabled = true;
-                ctx.imageSmoothingQuality = 'high';
                 
-                // 2. FILTRO ESTILO "SCANNER DE DOCUMENTO": Deixa a imagem super nítida
-                ctx.filter = 'grayscale(100%) contrast(150%) brightness(110%)';
+                // Filtro mais brando. Apenas tons de cinza. Muito contraste causa alucinações no OCR.
+                ctx.filter = 'grayscale(100%)';
                 ctx.drawImage(croppedCanvas, 0, 0, finalCanvas.width, finalCanvas.height);
                 
-                return finalCanvas;
+                return finalCanvas.toDataURL('image/jpeg', 0.9);
             }
         };
 
         const OCR = {
-            worker: null,
-            currentLanguage: '',
-            
-            async init(lang) {
-                if (!this.worker || this.currentLanguage !== lang) {
-                    if (this.worker) await this.worker.terminate();
-                    this.worker = await Tesseract.createWorker(lang, 1, {
-                        logger: m => this.updateProgress(m)
-                    });
+            recognize: async function(image, lang) {
+                return new Promise((resolve, reject) => {
+                    document.getElementById('progress-bar').style.width = `10%`;
+                    document.getElementById('progress-text').innerText = `10%`;
                     
-                    // PSM 3 é o modo padrão de auto-detecção de parágrafos.
-                    await this.worker.setParameters({ tessedit_pageseg_mode: '3' });
-                    this.currentLanguage = lang;
-                }
+                    // Chamada direta do Tesseract, mais rápida para usos avulsos
+                    Tesseract.recognize(
+                        image,
+                        lang,
+                        {
+                            logger: m => {
+                                if (m.status === 'recognizing text') {
+                                    const pct = Math.round(m.progress * 100);
+                                    document.getElementById('progress-bar').style.width = `${pct}%`;
+                                    document.getElementById('progress-text').innerText = `${pct}%`;
+                                }
+                            }
+                        }
+                    ).then(({ data: { text } }) => {
+                        resolve(this.cleanText(text));
+                    }).catch(err => {
+                        reject(err);
+                    });
+                });
             },
-            updateProgress(m) {
-                if (m.status === 'recognizing text' || m.status === 'loading tesseract core') {
-                    const pct = Math.round((m.progress || 0) * 100);
-                    document.getElementById('progress-bar').style.width = `${pct}%`;
-                    document.getElementById('progress-text').innerText = `${pct}%`;
-                }
-            },
-            async recognize(imageData, lang) {
-                try {
-                    document.getElementById('process-status').innerText = "Carregando motor OCR...";
-                    await this.init(lang);
-                    document.getElementById('process-status').innerText = "Extraindo texto...";
-                    const { data: { text } } = await this.worker.recognize(imageData);
-                    return this.cleanText(text);
-                } catch (error) {
-                    throw new Error("Falha ao processar.");
-                }
-            },
-            
-            // O ALGORITMO MÁGICO PARA TEXTO FLUIDO E CORRETO
             cleanText(text) {
                 if (!text) return "";
+                // Como não estamos usando filtros pesados, a própria IA limpa a maioria.
+                // Apenas padronizamos as quebras de linha.
+                let cleaned = text.replace(/\n{3,}/g, '\n\n').trim();
+                return cleaned;
+            }
+        };
+
+        // --- NOVO RECURSO: DITADO INTELIGENTE (Web Speech API) ---
+        const Dictation = {
+            recognition: null,
+            isRecording: false,
+            init() {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) return false;
                 
-                let cleaned = text;
-
-                // 1. Limpeza de caracteres bizarros (mantém letras, números, pontuação e quebras de linha)
-                cleaned = cleaned.replace(/[|~^\\_§©®™=<>*+`]/g, '');
-
-                // 2. União de Sílabas: Se a palavra foi separada por hífen no fim da linha na foto, ele junta de volta.
-                // Exemplo: ferra- \n menta  -> ferramenta
-                cleaned = cleaned.replace(/([a-zA-Zá-úÁ-Ú])-[\s]*\n[\s]*([a-zA-Zá-úÁ-Ú])/g, '$1$2');
-
-                // 3. O SEGREDO DO TEXTO FLUIDO:
-                // Quando o OCR encontra o final físico da linha na foto, ele dá um "Enter".
-                // Essa fórmula abaixo substitui o "Enter" solitário no meio de frases por "Espaços".
-                // MAS preserva "Enters duplos", que é quando realmente existe uma troca de parágrafo.
-                cleaned = cleaned.replace(/([^\n])\n([^\n])/g, '$1 $2');
-
-                // 4. Remove espaços duplos extras que foram gerados
-                cleaned = cleaned.replace(/ {2,}/g, ' ');
-
-                // 5. Deixa o texto bonito: no máximo 2 Enters de distância entre os parágrafos reais
-                cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+                this.recognition = new SpeechRecognition();
+                this.recognition.continuous = true;
+                this.recognition.interimResults = true; // Mostra resultados enquanto fala
                 
-                return cleaned.trim();
+                this.recognition.onresult = (event) => {
+                    let finalTranscript = '';
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) {
+                            finalTranscript += event.results[i][0].transcript;
+                        }
+                    }
+                    if (finalTranscript) {
+                        const textArea = Tabs.active === 'original' ? document.getElementById('result-text-original') : document.getElementById('result-text-traducao');
+                        textArea.value += " " + finalTranscript.trim();
+                        Actions.updateStats();
+                    }
+                };
+                
+                this.recognition.onerror = (event) => {
+                    this.stop();
+                };
+                
+                this.recognition.onend = () => {
+                    if(this.isRecording) this.recognition.start(); // Mantém ativo se não foi parado manualmente
+                };
+                return true;
+            },
+            toggle() {
+                if (!this.recognition && !this.init()) {
+                    alert("Seu navegador não suporta digitação por voz.");
+                    return;
+                }
+                
+                const btn = document.getElementById('btn-dictate');
+                if (this.isRecording) {
+                    this.stop();
+                } else {
+                    // Define o idioma do ditado com base na aba ativa
+                    this.recognition.lang = Tabs.active === 'original' ? document.getElementById('ocr-lang-select').value : document.getElementById('target-lang-select').value;
+                    // Corrige códigos para o padrão do speech
+                    if(this.recognition.lang === 'eng') this.recognition.lang = 'en-US';
+                    if(this.recognition.lang === 'por') this.recognition.lang = 'pt-BR';
+                    if(this.recognition.lang === 'spa') this.recognition.lang = 'es-ES';
+                    if(this.recognition.lang === 'fra') this.recognition.lang = 'fr-FR';
+
+                    this.isRecording = true;
+                    this.recognition.start();
+                    btn.innerHTML = '<i class="fa-solid fa-stop"></i> Parar Ditado';
+                    btn.classList.add('recording');
+                }
+            },
+            stop() {
+                if(this.recognition) {
+                    this.isRecording = false;
+                    this.recognition.stop();
+                    const btn = document.getElementById('btn-dictate');
+                    btn.innerHTML = '<i class="fa-solid fa-microphone"></i> Ditar';
+                    btn.classList.remove('recording');
+                }
             }
         };
 
@@ -450,6 +499,7 @@
                 
                 Actions.updateStats();
                 window.speechSynthesis.cancel();
+                Dictation.stop();
             }
         };
 
@@ -469,17 +519,9 @@
                     try { await navigator.share({ title: 'Texto Extraído', text: text }); } catch (err) {}
                 }
             },
-            downloadTXT() {
-                const text = Tabs.active === 'original' ? document.getElementById('result-text-original').value : document.getElementById('result-text-traducao').value;
-                const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = 'Texto_OCR.txt';
-                link.click();
-            },
             async translate() {
                 const text = document.getElementById('result-text-original').value;
-                if(!text || text.trim() === "") return alert("Não há texto para traduzir!");
+                if(!text || text.trim() === "") return alert("Não há texto original para traduzir!");
 
                 const targetLang = document.getElementById('target-lang-select').value;
                 const btn = document.getElementById('btn-translate');
@@ -508,7 +550,10 @@
                 if (Tabs.active === 'traducao') {
                     utterance.lang = document.getElementById('target-lang-select').value;
                 } else {
-                    utterance.lang = 'pt-BR';
+                    const ocrLang = document.getElementById('ocr-lang-select').value;
+                    if(ocrLang === 'eng') utterance.lang = 'en-US';
+                    else if(ocrLang === 'spa') utterance.lang = 'es-ES';
+                    else utterance.lang = 'pt-BR';
                 }
                 window.speechSynthesis.speak(utterance);
             },
@@ -525,7 +570,6 @@
             AppState.set('CAMERA_READY');
             if (!navigator.share) document.getElementById('btn-share').classList.add('hidden');
 
-            // --- LÓGICA DE CAPTURA PELA CÂMERA ---
             document.getElementById('btn-capture').addEventListener('click', () => {
                 const imageData = ImageProcessor.captureFrame(Camera.videoElement);
                 Camera.stop();
@@ -537,20 +581,15 @@
                 
                 if (cropper) cropper.destroy();
                 cropper = new Cropper(imgElement, {
-                    viewMode: 1,
-                    dragMode: 'crop',
-                    autoCropArea: 0.8,
-                    background: false
+                    viewMode: 1, dragMode: 'crop', autoCropArea: 0.8, background: false
                 });
             });
 
-            // --- LÓGICA DA GALERIA ---
             function handleImageUpload(e) {
                 if (e.target.files && e.target.files.length > 0) {
                     const reader = new FileReader();
                     reader.onload = function(event) {
-                        Camera.stop(); // Desliga a câmera
-                        
+                        Camera.stop(); 
                         const imgElement = document.getElementById('image-to-crop');
                         imgElement.src = event.target.result;
                         
@@ -558,10 +597,7 @@
                         
                         if (cropper) cropper.destroy();
                         cropper = new Cropper(imgElement, {
-                            viewMode: 1,
-                            dragMode: 'crop',
-                            autoCropArea: 0.8,
-                            background: false
+                            viewMode: 1, dragMode: 'crop', autoCropArea: 0.8, background: false
                         });
                     };
                     reader.readAsDataURL(e.target.files[0]);
@@ -572,16 +608,15 @@
             document.getElementById('gallery-input').addEventListener('change', handleImageUpload);
             document.getElementById('gallery-input-error').addEventListener('change', handleImageUpload);
 
-            // --- LÓGICA DE EXTRAÇÃO DE TEXTO ---
             document.getElementById('btn-process-crop').addEventListener('click', async () => {
                 AppState.set('PROCESSING');
-                const enhancedCanvas = ImageProcessor.getEnhancedCroppedData();
+                const imageBase64 = ImageProcessor.getEnhancedCroppedData();
                 const selectedOcrLang = document.getElementById('ocr-lang-select').value;
 
                 try {
-                    const text = await OCR.recognize(enhancedCanvas, selectedOcrLang);
+                    const text = await OCR.recognize(imageBase64, selectedOcrLang);
                     if (text.length < 2) {
-                        document.getElementById('error-msg').innerText = "Não conseguimos identificar texto legível na área selecionada.";
+                        document.getElementById('error-msg').innerText = "Não conseguimos identificar texto legível. A imagem pode estar embaçada.";
                         AppState.set('ERROR');
                         return;
                     }
@@ -596,11 +631,9 @@
                 }
             });
 
-            // Eventos de Câmera
             document.getElementById('btn-switch-cam').addEventListener('click', () => Camera.toggleCamera());
             document.getElementById('btn-flash').addEventListener('click', () => Camera.toggleFlash());
             
-            // Eventos de Navegação
             document.getElementById('btn-retake').addEventListener('click', () => {
                 document.getElementById('progress-bar').style.width = '0%';
                 document.getElementById('progress-text').innerText = '0%';
@@ -608,12 +641,11 @@
             });
             document.getElementById('btn-retry').addEventListener('click', () => AppState.set('CAMERA_READY'));
 
-            // Eventos de Ação
             document.getElementById('btn-copy').addEventListener('click', Actions.copy);
             document.getElementById('btn-share').addEventListener('click', Actions.share);
-            document.getElementById('btn-download').addEventListener('click', Actions.downloadTXT);
             document.getElementById('btn-translate').addEventListener('click', Actions.translate);
             document.getElementById('btn-speak').addEventListener('click', Actions.speak);
+            document.getElementById('btn-dictate').addEventListener('click', () => Dictation.toggle());
 
             document.getElementById('result-text-original').addEventListener('input', Actions.updateStats);
             document.getElementById('result-text-traducao').addEventListener('input', Actions.updateStats);
