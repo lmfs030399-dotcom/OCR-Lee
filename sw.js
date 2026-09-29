@@ -1,4 +1,4 @@
-const CACHE_NAME = 'scanner-tradutor-v1';
+const CACHE_NAME = 'meu-ocr-v1';
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
