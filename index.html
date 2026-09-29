@@ -355,22 +355,28 @@
             },
             getEnhancedCroppedData() {
                 if(!cropper) return null;
-                const croppedCanvas = cropper.getCroppedCanvas();
                 
-                // REDUZIDO o upscale para 1.5x (Garante velocidade sem perder muita qualidade)
-                const scale = 1.5; 
+                // Pega a imagem recortada com alta qualidade
+                const croppedCanvas = cropper.getCroppedCanvas({
+                    imageSmoothingEnabled: true,
+                    imageSmoothingQuality: 'high'
+                });
+                
+                // Amplia a imagem 2x. O Tesseract lê muito melhor imagens grandes.
+                // Sem aplicar filtros de contraste exagerados que destroem o texto.
+                const scale = 2; 
                 const finalCanvas = document.createElement('canvas');
                 finalCanvas.width = croppedCanvas.width * scale;
                 finalCanvas.height = croppedCanvas.height * scale;
                 
                 const ctx = finalCanvas.getContext('2d');
                 ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
                 
-                // Filtro mais brando. Apenas tons de cinza. Muito contraste causa alucinações no OCR.
-                ctx.filter = 'grayscale(100%)';
+                // Deixamos a imagem pura (apenas redimensionada) para o Tesseract usar sua IA interna
                 ctx.drawImage(croppedCanvas, 0, 0, finalCanvas.width, finalCanvas.height);
                 
-                return finalCanvas.toDataURL('image/jpeg', 0.9);
+                return finalCanvas.toDataURL('image/jpeg', 1.0);
             }
         };
 
@@ -380,7 +386,7 @@
                     document.getElementById('progress-bar').style.width = `10%`;
                     document.getElementById('progress-text').innerText = `10%`;
                     
-                    // Chamada direta do Tesseract, mais rápida para usos avulsos
+                    // Inicialização mais segura do Tesseract v5
                     Tesseract.recognize(
                         image,
                         lang,
@@ -388,8 +394,7 @@
                             logger: m => {
                                 if (m.status === 'recognizing text') {
                                     const pct = Math.round(m.progress * 100);
-                                    document.getElementById('progress-bar').style.width = `${pct}%`;
-                                    document.getElementById('progress-text').innerText = `${pct}%`;
+                                    document.getElementById('progress-bar').style.width = `${pct}\%`;                                     document.getElementById('progress-text').innerText = `${pct}%`;
                                 }
                             }
                         }
@@ -400,16 +405,37 @@
                     });
                 });
             },
+            
+            // --- O ALGORITMO MÁGICO DE FLUIDEZ DE TEXTO ---
             cleanText(text) {
                 if (!text) return "";
-                // Como não estamos usando filtros pesados, a própria IA limpa a maioria.
-                // Apenas padronizamos as quebras de linha.
-                let cleaned = text.replace(/\n{3,}/g, '\n\n').trim();
-                return cleaned;
+                
+                let cleaned = text;
+
+                // 1. Limpa lixos visuais do OCR, mantendo a formatação e a pontuação correta
+                cleaned = cleaned.replace(/[|~^\\_§©®™=<>*+`]/g, '');
+
+                // 2. Conserta hifens no final da linha (Ex: "parale- \n lepípedo" vira "paralelepípedo")
+                cleaned = cleaned.replace(/-\s*\n\s*/g, '');
+
+                // 3. O SEGREDO DO PARÁGRAFO:
+                // Protege quebras de parágrafo reais (duas quebras de linha ou mais) transformando-as numa marca
+                cleaned = cleaned.replace(/\n{2,}/g, '[[PARAGRAFO]]');
+
+                // 4. Transforma as quebras de linha únicas (Enters no meio da frase) em um espaço simples
+                // Isso faz a frase fluir continuamente, como num livro.
+                cleaned = cleaned.replace(/\n/g, ' ');
+
+                // 5. Devolve as quebras de parágrafo reais para o texto
+                cleaned = cleaned.replace(/\[\[PARAGRAFO\]\]/g, '\n\n');
+
+                // 6. Remove excesso de espaços no meio das frases
+                cleaned = cleaned.replace(/ {2,}/g, ' ');
+
+                return cleaned.trim();
             }
         };
 
-        // --- NOVO RECURSO: DITADO INTELIGENTE (Web Speech API) ---
         const Dictation = {
             recognition: null,
             isRecording: false,
@@ -419,7 +445,7 @@
                 
                 this.recognition = new SpeechRecognition();
                 this.recognition.continuous = true;
-                this.recognition.interimResults = true; // Mostra resultados enquanto fala
+                this.recognition.interimResults = true; 
                 
                 this.recognition.onresult = (event) => {
                     let finalTranscript = '';
@@ -430,7 +456,7 @@
                     }
                     if (finalTranscript) {
                         const textArea = Tabs.active === 'original' ? document.getElementById('result-text-original') : document.getElementById('result-text-traducao');
-                        textArea.value += " " + finalTranscript.trim();
+                        textArea.value += (textArea.value.length > 0 ? " " : "") + finalTranscript.trim();
                         Actions.updateStats();
                     }
                 };
@@ -440,7 +466,7 @@
                 };
                 
                 this.recognition.onend = () => {
-                    if(this.isRecording) this.recognition.start(); // Mantém ativo se não foi parado manualmente
+                    if(this.isRecording) this.recognition.start(); 
                 };
                 return true;
             },
@@ -454,9 +480,7 @@
                 if (this.isRecording) {
                     this.stop();
                 } else {
-                    // Define o idioma do ditado com base na aba ativa
                     this.recognition.lang = Tabs.active === 'original' ? document.getElementById('ocr-lang-select').value : document.getElementById('target-lang-select').value;
-                    // Corrige códigos para o padrão do speech
                     if(this.recognition.lang === 'eng') this.recognition.lang = 'en-US';
                     if(this.recognition.lang === 'por') this.recognition.lang = 'pt-BR';
                     if(this.recognition.lang === 'spa') this.recognition.lang = 'es-ES';
@@ -616,7 +640,7 @@
                 try {
                     const text = await OCR.recognize(imageBase64, selectedOcrLang);
                     if (text.length < 2) {
-                        document.getElementById('error-msg').innerText = "Não conseguimos identificar texto legível. A imagem pode estar embaçada.";
+                        document.getElementById('error-msg').innerText = "Não conseguimos identificar texto legível. A imagem pode estar embaçada ou sem texto.";
                         AppState.set('ERROR');
                         return;
                     }
