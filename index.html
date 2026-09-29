@@ -92,6 +92,7 @@
             border: 4px solid #ddd; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
         .btn-capture:active { transform: scale(0.95); background: #eee; }
+        
         .btn-icon {
             background: rgba(0,0,0,0.7); color: white; border: none;
             width: 55px; height: 55px; border-radius: 50%; font-size: 20px; cursor: pointer;
@@ -169,15 +170,19 @@
         <video id="camera-video" autoplay playsinline></video>
         <div class="camera-overlay"><div class="frame"></div></div>
         <div class="camera-controls">
-            <!-- Botão de Galeria adicionado -->
-            <button id="btn-gallery" class="btn-icon"><i class="fa-regular fa-image"></i></button>
+            
+            <!-- SOLUÇÃO MOBILE: Usamos <label> ligado diretamente ao input file -->
+            <label for="gallery-input" class="btn-icon" style="cursor: pointer;">
+                <i class="fa-regular fa-image"></i>
+            </label>
+            <!-- Input file escondido visualmente, mas presente no DOM para os celulares aceitarem o clique -->
+            <input type="file" id="gallery-input" accept="image/*" style="position: absolute; opacity: 0; width: 1px; height: 1px; z-index: -1;">
+
             <button id="btn-flash" class="btn-icon hidden"><i class="fa-solid fa-bolt"></i></button>
             <button id="btn-capture" class="btn-capture"></button>
             <button id="btn-switch-cam" class="btn-icon"><i class="fa-solid fa-camera-rotate"></i></button>
         </div>
         <canvas id="capture-canvas" class="hidden"></canvas>
-        <!-- Input invisível para carregar a foto da galeria -->
-        <input type="file" id="gallery-input" accept="image/*" class="hidden">
     </div>
 
     <!-- 2. TELA DE RECORTE (CROPPER) -->
@@ -199,7 +204,7 @@
         <p id="progress-text" style="margin-top: 10px; font-size: 14px; color: #aaa;">0%</p>
     </div>
 
-    <!-- 4. TELA DE RESULTADO -->
+    <!-- 4. TELA DE RESULTADOS -->
     <div id="result-screen" class="screen hidden">
         
         <!-- Abas -->
@@ -238,9 +243,18 @@
     <!-- 5. TELA DE ERRO -->
     <div id="error-screen" class="screen hidden">
         <div class="error-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
-        <h2 id="error-title">Erro</h2>
-        <p id="error-msg" style="margin: 15px 0; color: #aaa; font-size: 14px;">Ocorreu um problema.</p>
-        <button id="btn-retry" class="btn btn-primary" style="width: 200px; margin: 0 auto;">Tentar Novamente</button>
+        <h2 id="error-title">Erro na Câmera</h2>
+        <p id="error-msg" style="margin: 15px 0; color: #aaa; font-size: 14px;">Não foi possível acessar a câmera.</p>
+        
+        <div style="display: flex; flex-direction: column; gap: 15px; width: 80%; max-width: 250px; margin: 0 auto;">
+            <!-- Opção de galeria disponível mesmo se a câmera der erro -->
+            <label for="gallery-input-error" class="btn btn-primary" style="cursor: pointer;">
+                <i class="fa-regular fa-image"></i> Escolher da Galeria
+            </label>
+            <input type="file" id="gallery-input-error" accept="image/*" style="position: absolute; opacity: 0; width: 1px; height: 1px; z-index: -1;">
+            
+            <button id="btn-retry" class="btn btn-secondary">Tentar Câmera Novamente</button>
+        </div>
     </div>
 
     <script>
@@ -302,7 +316,7 @@
                     if (capabilities.torch) btnFlash.classList.remove('hidden');
                     else btnFlash.classList.add('hidden');
                 } catch (err) {
-                    document.getElementById('error-msg').innerText = "Não foi possível acessar a câmera. Tente usar o botão de galeria.";
+                    document.getElementById('error-msg').innerText = "Verifique as permissões de câmera do navegador.";
                     AppState.set('ERROR');
                 }
             },
@@ -339,7 +353,6 @@
                 processedCanvas.width = croppedCanvas.width;
                 processedCanvas.height = croppedCanvas.height;
                 
-                // Filtro mais suave: Evita que o Tesseract leia ruídos como letras estranhas
                 ctx.filter = 'grayscale(100%) contrast(120%) brightness(105%)';
                 ctx.drawImage(croppedCanvas, 0, 0);
                 
@@ -382,14 +395,9 @@
             cleanText(text) {
                 if (!text) return "";
                 
-                // REGEX PODEROSO: Permite apenas letras, números, espaços e pontuações úteis.
-                // Remove todo o lixo de formatação como | ~ ^ _ \ = <> *
+                // REGEX PODEROSO: Remove caracteres lixo
                 let cleaned = text.replace(/[^\w\sÀ-ÿ.,!?@()\-:;$€£%'"/]/g, ' ');
-                
-                // Remove espaços duplos criados pela limpeza
                 cleaned = cleaned.replace(/ {2,}/g, ' ');
-                
-                // Padroniza as quebras de linha (evita grandes espaços vazios)
                 cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
                 
                 return cleaned;
@@ -510,12 +518,8 @@
                 });
             });
 
-            // --- NOVA LÓGICA: ESCOLHER DA GALERIA ---
-            document.getElementById('btn-gallery').addEventListener('click', () => {
-                document.getElementById('gallery-input').click();
-            });
-
-            document.getElementById('gallery-input').addEventListener('change', function(e) {
+            // --- SOLUÇÃO PARA A GALERIA (CELULAR E PC) ---
+            function handleImageUpload(e) {
                 if (e.target.files && e.target.files.length > 0) {
                     const reader = new FileReader();
                     reader.onload = function(event) {
@@ -536,8 +540,12 @@
                     };
                     reader.readAsDataURL(e.target.files[0]);
                 }
-                this.value = ''; // Reseta para permitir escolher a mesma foto depois
-            });
+                e.target.value = ''; // Reseta para permitir escolher a mesma foto depois
+            }
+
+            // Conecta o manipulador aos dois inputs de galeria (Câmera e Erro)
+            document.getElementById('gallery-input').addEventListener('change', handleImageUpload);
+            document.getElementById('gallery-input-error').addEventListener('change', handleImageUpload);
 
             // --- LÓGICA DE EXTRAÇÃO DE TEXTO ---
             document.getElementById('btn-process-crop').addEventListener('click', async () => {
